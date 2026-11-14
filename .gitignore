@@ -10,3 +10,6 @@ obj/
 # Private files - never upload these
 secrets.txt
 seen.txt
+*.kate-swp
+*.swp
+*~
