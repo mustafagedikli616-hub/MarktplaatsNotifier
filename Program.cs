@@ -5,11 +5,42 @@ using System.Text.Json;
 
 HttpClient client = new HttpClient();
 client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0");
+
+Dictionary<string, int> searches = new Dictionary<string, int>();
+string[] lines = File.ReadAllLines("searches.txt");
+if (!File.Exists("secrets.txt"))
+{
+    Console.Write("Paste your bot token: ");
+    string newToken = Console.ReadLine().Trim();
+
+    Console.WriteLine("Now open your bot in Telegram and send it any message (like 'hi').");
+    Console.WriteLine("Waiting for your message...");
+
+    string newChatId = "";
+    while (newChatId == "")
+    {
+        string updatesJson = await client.GetStringAsync($"https://api.telegram.org/bot{newToken}/getUpdates");
+        JsonDocument updates = JsonDocument.Parse(updatesJson);
+
+        foreach (JsonElement update in updates.RootElement.GetProperty("result").EnumerateArray())
+        {
+            if (update.TryGetProperty("message", out JsonElement msg))
+            {
+                newChatId = msg.GetProperty("chat").GetProperty("id").GetInt64().ToString();
+            }
+        }
+
+        await Task.Delay(2000);
+    }
+
+    File.WriteAllLines("secrets.txt", new string[] { newToken, newChatId });
+    Console.Clear();
+    Console.WriteLine("Setup done! You won't be asked again.");
+}
 string[] secrets = File.ReadAllLines("secrets.txt");
 string token = secrets[0];
 string chatId = secrets[1];
-Dictionary<string, int> searches = new Dictionary<string, int>();
-string[] lines = File.ReadAllLines("searches.txt");
+
 foreach (string line in lines)
 {
     if (line.Trim() == "" || line.StartsWith("#"))

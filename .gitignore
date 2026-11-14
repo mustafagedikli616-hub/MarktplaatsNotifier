@@ -13,3 +13,5 @@ seen.txt
 *.kate-swp
 *.swp
 *~
+publish/
+*.zip
