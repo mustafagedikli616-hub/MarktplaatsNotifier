@@ -1,8 +1,16 @@
-# Marktplaats Notifier
+# 🛒 Marktplaats Notifier
 
-A C# console app that watches [Marktplaats.nl](https://www.marktplaats.nl) searches and sends new listings straight to your phone via Telegram — much faster than Marktplaats' own saved-search emails.
+![C#](https://img.shields.io/badge/C%23-239120?logo=csharp&logoColor=white)
+![.NET](https://img.shields.io/badge/.NET-512BD4?logo=dotnet&logoColor=white)
+![Telegram](https://img.shields.io/badge/Telegram_Bot-26A5E4?logo=telegram&logoColor=white)
+
+A C# console app that watches [Marktplaats.nl](https://www.marktplaats.nl) searches and sends new listings straight to your phone via Telegram, within about a minute of being posted. Much faster than Marktplaats' own saved searches.
 
 I built this to catch cheap broken monitors, PCs and PC parts to repair and resell, before anyone else sees them.
+
+<p align="center">
+  <img src="docs/screenshot.png" alt="Telegram notifications from the bot" width="320">
+</p>
 
 ## Features
 
@@ -14,6 +22,13 @@ I built this to catch cheap broken monitors, PCs and PC parts to repair and rese
 - Crash protection: a network hiccup or an odd listing is logged and skipped instead of stopping the bot
 - Quiet first run, so you don't get flooded with hundreds of old listings
 
+## Built with
+
+- **C# / .NET** – console app with top-level statements
+- **HttpClient** + **async/await** – fetching search results
+- **System.Text.Json** – parsing the listing data
+- **Telegram Bot API** – sending the notifications
+
 ## How it works
 
 1. Fetches search results as JSON from Marktplaats' search endpoint (`/lrp/api/search`)
@@ -23,32 +38,32 @@ I built this to catch cheap broken monitors, PCs and PC parts to repair and rese
 
 ## Setup
 
-**Requirements:** .NET 6 or newer, and a Telegram account.
+👉 **Not a programmer?** Follow the step-by-step [**Setup guide**](SETUP.md). No coding needed.
 
-1. **Create a Telegram bot:** message [@BotFather](https://t.me/BotFather), send `/newbot` and copy the token it gives you.
-2. **Get your chat ID:** send any message to your new bot, then open  
-   `https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates` and copy the `chat.id` number.
-3. **Create `secrets.txt`** in the project folder with two lines:
-   ```
-   <your bot token>
-   <your chat id>
-   ```
-   This file is in `.gitignore`, so it never gets uploaded.
-4. **Run it:**
-   ```
-   dotnet run
-   ```
+**For developers:** you need .NET 6 or newer. Clone the repo and run:
+
+```
+dotnet run
+```
+
+On the first launch, the app asks for your Telegram bot token and finds your chat ID by itself. Both are saved to `secrets.txt`, which is in `.gitignore`.
 
 ## Changing the searches
 
-Edit the `searches` dictionary in `Program.cs`. Each line is a search term and its max price in euros:
+Edit `searches.txt`. Each line is a search term, a `;` and its max price in euros:
 
-```csharp
-{ "defect monitor", 60 },
-{ "rtx 3060", 110 },
+```
+defect monitor;60
+rtx 3060;110
 ```
 
 Tip: after adding a new search, delete `seen.txt` so the first round is quiet again and you don't get all of that search's old listings.
+
+## Roadmap
+
+- [ ] Allow pickup-only listings near my own city
+- [ ] Limit searches to specific Marktplaats categories
+- [ ] Run 24/7 on a small server
 
 ## Note
 
