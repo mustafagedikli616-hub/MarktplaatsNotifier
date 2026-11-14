@@ -1,0 +1,19 @@
+# One search per line: search words;max price in euros
+# Lines starting with # are ignored.
+# This is an example, replace the searches with your own.
+defect monitor;60
+monitor geen beeld;60
+monitor kapot;60
+4k 144hz monitor;120
+1440p 144hz monitor;80
+ultrawide monitor;100
+pc defect;100
+game pc defect;150
+gaming pc moet weg;150
+pc start niet op;100
+videokaart defect;60
+rtx 3060;110
+rx 6600;90
+ddr4 32gb;70
+moederbord b550;45
+gaming laptop defect;150

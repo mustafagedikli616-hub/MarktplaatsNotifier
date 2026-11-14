@@ -8,25 +8,20 @@ client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0");
 string[] secrets = File.ReadAllLines("secrets.txt");
 string token = secrets[0];
 string chatId = secrets[1];
-Dictionary<string, int> searches = new Dictionary<string, int>
+Dictionary<string, int> searches = new Dictionary<string, int>();
+string[] lines = File.ReadAllLines("searches.txt");
+foreach (string line in lines)
 {
-    { "defect monitor", 60 },
-    { "monitor geen beeld", 60 },
-    { "monitor kapot", 60 },
-    { "4k 144hz monitor", 120 },
-    { "1440p 144hz monitor", 80 },
-    { "ultrawide monitor", 100 },
-    { "pc defect", 100 },
-    { "game pc defect", 150 },
-    { "gaming pc moet weg", 150 },
-    { "pc start niet op", 100 },
-    { "videokaart defect", 60 },
-    { "rtx 3060", 110 },
-    { "rx 6600", 90 },
-    { "ddr4 32gb", 70 },
-    { "moederbord b550", 45 },
-    { "gaming laptop defect", 150 }
-};
+    if (line.Trim() == "" || line.StartsWith("#"))
+    {
+        continue;
+    }
+
+    string[] parts = line.Split(';');
+    string searchText = parts[0].Trim();
+    int limit = int.Parse(parts[1].Trim());
+    searches.Add(searchText, limit);
+}
 
 HashSet<string> seenIds = new HashSet<string>();
 if (File.Exists("seen.txt"))
