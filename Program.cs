@@ -1,17 +1,45 @@
-﻿// See https://aka.ms/new-console-template for more information
-
-using System.ComponentModel;
+﻿
 using System.Text.Json;
+AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
+{
+    Exception error = (Exception)e.ExceptionObject;
+    Console.WriteLine("Something went wrong: " + error.Message);
+    Console.WriteLine("Press Enter to close.");
+    Console.ReadLine();
+};
 
 HttpClient client = new HttpClient();
 client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0");
 
 Dictionary<string, int> searches = new Dictionary<string, int>();
+if (!File.Exists("searches.txt"))
+{
+    Console.WriteLine("Can't find searches.txt. Put it in the same folder as the app.");
+    Console.WriteLine("Press Enter to close.");
+    Console.ReadLine();
+    return;
+}
+Dictionary<string, string> categories = new Dictionary<string, string>(); 
+
 string[] lines = File.ReadAllLines("searches.txt");
 if (!File.Exists("secrets.txt"))
 {
-    Console.Write("Paste your bot token: ");
-    string newToken = Console.ReadLine().Trim();
+    string newToken = "";
+    while (newToken == "")
+    {
+        Console.Write("Paste your bot token: ");
+        string input = Console.ReadLine().Trim();
+
+        try
+        {
+            await client.GetStringAsync($"https://api.telegram.org/bot{input}/getMe");
+            newToken = input;
+        }
+        catch
+        {
+            Console.WriteLine("That token doesn't work (or there's no internet). Check it and try again.");
+        }
+    }
 
     Console.WriteLine("Now open your bot in Telegram and send it any message (like 'hi').");
     Console.WriteLine("Waiting for your message...");
@@ -52,6 +80,12 @@ foreach (string line in lines)
     string searchText = parts[0].Trim();
     int limit = int.Parse(parts[1].Trim());
     searches.Add(searchText, limit);
+    string category = "";
+    if (parts.Length > 2)
+    {
+        category = parts[2].Trim();
+    }
+    categories.Add(searchText, category);
 }
 
 HashSet<string> seenIds = new HashSet<string>();
@@ -75,6 +109,10 @@ while (true)
         try
         {
             string url = $"https://www.marktplaats.nl/lrp/api/search?query={Uri.EscapeDataString(search)}&limit=30";
+            if (categories[search] != "")
+            {
+                url += $"&l1CategoryId={categories[search]}";
+            }
             string json = await client.GetStringAsync(url);
             JsonDocument doc = JsonDocument.Parse(json);
             JsonElement listings = doc.RootElement.GetProperty("listings");
@@ -133,6 +171,7 @@ while (true)
                 {
                     city = cityElement.GetString();
                 }
+                
 
                 string link = listing.GetProperty("vipUrl").GetString();
                 bool canShip = false;

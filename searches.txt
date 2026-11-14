@@ -1,19 +1,25 @@
 # One search per line: search words;max price in euros
 # Lines starting with # are ignored.
 # This is an example, replace the searches with your own.
-defect monitor;60
-monitor geen beeld;60
-monitor kapot;60
-4k 144hz monitor;120
-1440p 144hz monitor;80
-ultrawide monitor;100
-pc defect;100
-game pc defect;150
-gaming pc moet weg;150
-pc start niet op;100
-videokaart defect;60
-rtx 3060;110
-rx 6600;90
-ddr4 32gb;70
-moederbord b550;45
-gaming laptop defect;150
+# Format: search words;max price;category (category is optional)
+# Without a category, all of Marktplaats is searched.
+# Categories: 322 = Computers en Software, 31 = Audio, Tv en Foto,
+#   356 = Spelcomputers en Games, 820 = Telecommunicatie,
+#   2600 = Auto-onderdelen, 445 = Fietsen en Brommers,
+#   537 = Witgoed en Apparatuur, 504 = Huis en Inrichting
+defect monitor;60;322
+monitor geen beeld;60;322
+monitor kapot;60;322
+4k 144hz monitor;120;322
+1440p 144hz monitor;80;322
+ultrawide monitor;100;322
+pc defect;100;322
+game pc defect;150;322
+gaming pc moet weg;150;322
+pc start niet op;100;322
+videokaart defect;60;322
+rtx 3060;110;322
+rx 6600;90;322
+ddr4 32gb;70;322
+moederbord b550;45;322
+gaming laptop defect;150;322
