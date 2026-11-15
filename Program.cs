@@ -1,5 +1,5 @@
 
-using System.Reflection.Emit;
+
 using System.Text.Json;
 AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
 {
@@ -158,6 +158,11 @@ string FindBadFault(string text)
         }
     }
     return "";
+}
+bool IsNight()
+{
+    int hour = DateTime.Now.Hour;
+    return hour >= 23 || hour < 7;
 }
 
 
@@ -632,16 +637,21 @@ while (true)
                 string message =
                     $"<b>{safeTitle}</b>\n💶 {priceText}\n📍 {city}\n📅 {date}\n\n🔗 <a href=\"https://www.marktplaats.nl{link}\">Bekijk advertentie</a>";
                 string encoded = Uri.EscapeDataString(message);
+                string silent = "";
+                if (IsNight())
+                {
+                    silent = "&disable_notification=true";
+                }
                 if (photo != "")
                 {
                     string encodedPhoto = Uri.EscapeDataString(photo);
                     await client.GetStringAsync(
-                        $"https://api.telegram.org/bot{token}/sendPhoto?chat_id={chatId}&photo={encodedPhoto}&caption={encoded}&parse_mode=HTML");
+                        $"https://api.telegram.org/bot{token}/sendPhoto?chat_id={chatId}&photo={encodedPhoto}&caption={encoded}&parse_mode=HTML{silent}");
                 }
                 else
                 {
                     await client.GetStringAsync(
-                        $"https://api.telegram.org/bot{token}/sendMessage?chat_id={chatId}&text={encoded}&parse_mode=HTML");
+                        $"https://api.telegram.org/bot{token}/sendMessage?chat_id={chatId}&text={encoded}&parse_mode=HTML{silent}");
                 }
 
                 await Task.Delay(1000);
