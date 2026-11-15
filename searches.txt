@@ -21,3 +21,31 @@ rx 6600;90;322
 ddr4 32gb;130;322
 moederbord b550;45;322
 gaming laptop defect;150;322
+# Monitors: backlight / power board faults
+monitor beeld valt weg;50;322
+monitor knippert;50;322
+monitor gaat niet aan;50;322
+curved monitor defect;80;322
+
+# PCs: easy fixes (RAM, PSU, SSD, Windows, cleaning)
+pc geen beeld;80;322
+pc valt uit;100;322
+pc blauw scherm;100;322
+windows start niet op;80;322
+
+# Mini PCs: easy to resell, also handy for running your bot 24/7
+lenovo thinkcentre tiny;80;322
+dell optiplex micro;80;322
+hp elitedesk mini;80;322
+
+# TVs: same backlight fault as monitors
+tv geen beeld wel geluid;60;31
+pc behuizing;20;322
+pc kast;20;322
+nzxt h510;25;322
+fractal design;30;322
+
+# Case fans
+arctic p12;12;322
+case fans;10;322
+behuizing ventilatoren;10;322
