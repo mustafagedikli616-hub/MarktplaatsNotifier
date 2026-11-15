@@ -140,40 +140,15 @@ if (File.Exists("seen.txt"))
 }
 
 
-string[] skipWords = { "gebarsten", "barst", "strepen", "lijnen", "waterschade" };
 
 
-string FindBadFault(string text)
-{
-    string[] pieces = text.ToLower().Split('.', ',', '!', '?', '\n');
 
-    foreach (string piece in pieces)
-    {
-        if (piece.Contains("geen") || piece.Contains("zonder"))
-        {
-            continue;
-        }
 
-        foreach (string word in skipWords)
-        {
-            if (piece.Contains(word))
-            {
-                return word;
-            }
-        }
-    }
-
-    return "";
-}
 
 string postcode = "1055NE";
 int pickupKm = 5;
 
-bool IsNight()
-{
-    int hour = DateTime.Now.Hour;
-    return hour >= 23 || hour < 7;
-}
+
 
 
 long lastUpdateId = 0;
@@ -551,14 +526,13 @@ while (true)
                 Listing ad = Listing.FromJson(listing);
 
 
-                string lowerTitle = ad.Title.ToLower();
-                if (lowerTitle.Contains("gezocht") || lowerTitle.Contains("reparatie") || lowerTitle.Contains("inkoop"))
+                if (Filters.IsNotForSale(ad.Title))
                 {
                     continue;
                 }
 
 
-                string badWord = FindBadFault(ad.Title + ". " + ad.Description);
+                string badWord = Filters.FindBadFault(ad.Title + ". " + ad.Description);
                 if (badWord != "")
                 {
                     Console.WriteLine($"Skipped ({badWord}): {ad.Title}");
@@ -579,7 +553,7 @@ while (true)
                 }
 
                 
-                await telegram.SendListing(ad, IsNight());
+                await telegram.SendListing(ad, Filters.IsNight());
                 await Task.Delay(1000);
                 Console.WriteLine($"Sent: {ad.Title}");
                 Console.WriteLine();
