@@ -1,6 +1,5 @@
-
-
 using System.Text.Json;
+
 AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
 {
     Exception error = (Exception)e.ExceptionObject;
@@ -23,9 +22,11 @@ client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0");
 Dictionary<string, int> searches = new Dictionary<string, int>();
 if (!File.Exists("searches.txt"))
 {
-    File.WriteAllText("searches.txt", "# One search per line: search words;max price;category\n# Example: defect monitor;60;322\n");
+    File.WriteAllText("searches.txt",
+        "# One search per line: search words;max price;category\n# Example: defect monitor;60;322\n");
 }
-Dictionary<string, string> categories = new Dictionary<string, string>(); 
+
+Dictionary<string, string> categories = new Dictionary<string, string>();
 
 string[] lines = File.ReadAllLines("searches.txt");
 if (!File.Exists("secrets.txt"))
@@ -71,11 +72,13 @@ if (!File.Exists("secrets.txt"))
     Console.Clear();
     Console.WriteLine("Setup done! You won't be asked again.");
 }
+
 string[] secrets = File.ReadAllLines("secrets.txt");
 if (secrets.Length < 2)
 {
     StopWithError("secrets.txt is damaged. Delete it and start the app again to redo the setup.");
 }
+
 string token = secrets[0];
 string chatId = secrets[1];
 
@@ -91,14 +94,16 @@ foreach (string line in lines)
     string[] parts = line.Split(';');
     if (parts.Length < 2 || parts[0].Trim() == "")
     {
-        StopWithError($"Line {lineNumber} in searches.txt is wrong: \"{line}\"\nUse: search words;max price (for example: defect monitor;60)");
+        StopWithError(
+            $"Line {lineNumber} in searches.txt is wrong: \"{line}\"\nUse: search words;max price (for example: defect monitor;60)");
     }
 
     string searchText = parts[0].Trim();
 
     if (!int.TryParse(parts[1].Trim(), out int limit))
     {
-        StopWithError($"Line {lineNumber} in searches.txt: \"{parts[1].Trim()}\" is not a valid price. Use whole euros, like 60.");
+        StopWithError(
+            $"Line {lineNumber} in searches.txt: \"{parts[1].Trim()}\" is not a valid price. Use whole euros, like 60.");
     }
 
     string category = "";
@@ -109,7 +114,8 @@ foreach (string line in lines)
 
     if (category != "" && !int.TryParse(category, out _))
     {
-        StopWithError($"Line {lineNumber} in searches.txt: \"{category}\" is not a valid category. Use a number like 322, or leave it out.");
+        StopWithError(
+            $"Line {lineNumber} in searches.txt: \"{category}\" is not a valid category. Use a number like 322, or leave it out.");
     }
 
     if (searches.ContainsKey(searchText))
@@ -138,12 +144,10 @@ string[] skipWords = { "gebarsten", "barst", "strepen", "lijnen", "waterschade" 
 
 string FindBadFault(string text)
 {
-  
     string[] pieces = text.ToLower().Split('.', ',', '!', '?', '\n');
 
     foreach (string piece in pieces)
     {
-      
         if (piece.Contains("geen") || piece.Contains("zonder"))
         {
             continue;
@@ -157,11 +161,13 @@ string FindBadFault(string text)
             }
         }
     }
+
     return "";
 }
 
 string postcode = "1055NE";
 int pickupKm = 5;
+
 bool IsNight()
 {
     int hour = DateTime.Now.Hour;
@@ -179,11 +185,12 @@ async Task SendText(string text, string keyboard = "")
     {
         url += $"&reply_markup={Uri.EscapeDataString(keyboard)}";
     }
+
     await client.GetStringAsync(url);
 }
 
 
-string addStep = "";       
+string addStep = "";
 string pendingSearch = "";
 int pendingPrice = 0;
 
@@ -204,7 +211,6 @@ Dictionary<string, string> categoryButtons = new Dictionary<string, string>
 
 try
 {
-    
     List<object> commands = new List<object>
     {
         new { command = "add", description = "Add a search" },
@@ -214,7 +220,8 @@ try
         new { command = "help", description = "Show all commands" }
     };
     string commandsJson = JsonSerializer.Serialize(commands);
-    await client.GetStringAsync($"https://api.telegram.org/bot{token}/setMyCommands?commands={Uri.EscapeDataString(commandsJson)}");
+    await client.GetStringAsync(
+        $"https://api.telegram.org/bot{token}/setMyCommands?commands={Uri.EscapeDataString(commandsJson)}");
 
     if (searches.Count == 0)
     {
@@ -240,9 +247,12 @@ for (int i = 0; i < labels.Count; i += 2)
     {
         row.Add(new { text = labels[i + 1] });
     }
+
     rows.Add(row);
 }
-string categoryKeyboard = JsonSerializer.Serialize(new { keyboard = rows, one_time_keyboard = true, resize_keyboard = true });
+
+string categoryKeyboard =
+    JsonSerializer.Serialize(new { keyboard = rows, one_time_keyboard = true, resize_keyboard = true });
 string removeKeyboard = "{\"remove_keyboard\":true}";
 
 async Task StartAdd(string searchText)
@@ -352,6 +362,7 @@ string AddSearch(string line)
     {
         File.AppendAllText("searches.txt", "\n");
     }
+
     File.AppendAllText("searches.txt", newLine + "\n");
 
     return $"✅ Added: {searchText} (max €{limit})";
@@ -376,8 +387,10 @@ string RemoveSearch(string searchText)
         {
             continue;
         }
+
         keptLines.Add(fileLine);
     }
+
     File.WriteAllLines("searches.txt", keptLines);
 
     return $"🗑️ Removed: {searchText}";
@@ -390,6 +403,7 @@ string ListSearches()
     {
         text += $"\n• {pair.Key} (max €{pair.Value})";
     }
+
     return text;
 }
 
@@ -405,7 +419,8 @@ async Task CheckCommands()
 {
     try
     {
-        string updatesJson = await client.GetStringAsync($"https://api.telegram.org/bot{token}/getUpdates?offset={lastUpdateId + 1}");
+        string updatesJson =
+            await client.GetStringAsync($"https://api.telegram.org/bot{token}/getUpdates?offset={lastUpdateId + 1}");
         using JsonDocument updates = JsonDocument.Parse(updatesJson);
 
         foreach (JsonElement update in updates.RootElement.GetProperty("result").EnumerateArray())
@@ -416,6 +431,7 @@ async Task CheckCommands()
             {
                 continue;
             }
+
             if (!msg.TryGetProperty("text", out JsonElement textElement))
             {
                 continue;
@@ -507,11 +523,13 @@ while (true)
 
         try
         {
-            string url = $"https://www.marktplaats.nl/lrp/api/search?query={Uri.EscapeDataString(search)}&limit=30&sortBy=SORT_INDEX&sortOrder=DECREASING&postcode={postcode}";
+            string url =
+                $"https://www.marktplaats.nl/lrp/api/search?query={Uri.EscapeDataString(search)}&limit=30&sortBy=SORT_INDEX&sortOrder=DECREASING&postcode={postcode}";
             if (categories[search] != "")
             {
                 url += $"&l1CategoryId={categories[search]}";
             }
+
             string json = await client.GetStringAsync(url);
             using JsonDocument doc = JsonDocument.Parse(json);
             JsonElement listings = doc.RootElement.GetProperty("listings");
@@ -521,11 +539,12 @@ while (true)
             {
                 string itemId = listing.GetProperty("itemId").GetString();
 
-      
+
                 if (itemId.StartsWith("a"))
                 {
                     continue;
                 }
+
                 if (seenIds.Contains(itemId))
                 {
                     continue;
@@ -540,129 +559,61 @@ while (true)
                 {
                     continue;
                 }
+                Listing ad = Listing.FromJson(listing);
 
-                string title = listing.GetProperty("title").GetString();
-                string lowerTitle = title.ToLower();
+
+                string lowerTitle = ad.Title.ToLower();
                 if (lowerTitle.Contains("gezocht") || lowerTitle.Contains("reparatie") || lowerTitle.Contains("inkoop"))
                 {
                     continue;
                 }
 
-  
-                string description = "";
-                if (listing.TryGetProperty("description", out JsonElement descriptionElement))
-                {
-                    description = descriptionElement.GetString() ?? "";
-                }
 
-                string badWord = FindBadFault(title + ". " + description);
+                string badWord = FindBadFault(ad.Title + ". " + ad.Description);
                 if (badWord != "")
                 {
-                    Console.WriteLine($"Skipped ({badWord}): {title}");
+                    Console.WriteLine($"Skipped ({badWord}): {ad.Title}");
                     continue;
                 }
 
-                int priceCents = listing.GetProperty("priceInfo").GetProperty("priceCents").GetInt32();
-                double price = priceCents / 100.0;
-                string priceType = listing.GetProperty("priceInfo").GetProperty("priceType").GetString();
 
-                string priceText = $"€{price}";
-                if (priceType == "FAST_BID")
-                {
-                    priceText = "Bieden";
-                }
-                else if (priceType == "MIN_BID" && price == 0)
-                {
-                    priceText = "Bieden";
-                }
-                else if (priceType == "MIN_BID")
-                {
-                    priceText = $"Bieden vanaf €{price}";
-                }
-                else if (priceType == "FREE")
-                {
-                    priceText = "Gratis";
-                }
-                else if (priceType == "SEE_DESCRIPTION")
-                {
-                    priceText = "Zie omschrijving";
-                }
-
-                if (price > maxPrice)
+                if (ad.Price > maxPrice)
                 {
                     continue;
                 }
 
-                string city = "Onbekend";
-                JsonElement location = listing.GetProperty("location");
-                int distanceKm = -1;
-                if (location.TryGetProperty("distanceMeters", out JsonElement distanceElement))
-                {
-                    distanceKm = distanceElement.GetInt32() / 1000;
-                }
 
-                if (location.TryGetProperty("cityName", out JsonElement cityElement))
-                {
-                    city = cityElement.GetString();
-                }
-                
-
-                string date = "";
-                if (listing.TryGetProperty("date", out JsonElement dateElement))
-                {
-                    date = dateElement.GetString();
-                }
-
-                string link = listing.GetProperty("vipUrl").GetString();
-                bool canShip = false;
-                if (listing.TryGetProperty("attributes", out JsonElement attributes))
-                {
-                    foreach (JsonElement attribute in attributes.EnumerateArray())
-                    {
-                        string key = attribute.GetProperty("key").GetString();
-                        string value = attribute.GetProperty("value").GetString();
-                        if (key == "delivery" && value.Contains("Verzenden"))
-                        {
-                            canShip = true;
-                        }
-                    }
-                }
-
-
-                bool isNearby = distanceKm >= 0 && distanceKm <= pickupKm;
-                if (!canShip && !isNearby)
+                bool isNearby = ad.DistanceKm >= 0 && ad.DistanceKm <= pickupKm;
+                if (!ad.CanShip && !isNearby)
                 {
                     continue;
                 }
-                string place = city;
-                if (distanceKm >= 0)
+
+                string place = ad.City;
+                if (ad.DistanceKm >= 0)
                 {
-                    place += $" ({distanceKm} km)";
+                    place += $" ({ad.DistanceKm} km)";
                 }
-                if (!canShip)
+
+                if (!ad.CanShip)
                 {
                     place += " · alleen ophalen";
                 }
 
-                string photo = "";
-                if (listing.TryGetProperty("imageUrls", out JsonElement images) && images.GetArrayLength() > 0)
-                {
-                    photo = "https:" + images[0].GetString();
-                    photo = photo.Replace("$_82", "$_85");
-                }
 
-                string safeTitle = System.Net.WebUtility.HtmlEncode(title);
+                string safeTitle = System.Net.WebUtility.HtmlEncode(ad.Title);
                 string message =
-                    $"<b>{safeTitle}</b>\n💶 {priceText}\n📍 {place}\n📅 {date}\n\n🔗 <a href=\"https://www.marktplaats.nl{link}\">Bekijk advertentie</a>";
+                    $"<b>{safeTitle}</b>\n💶 {ad.PriceText}\n📍 {place}\n📅 {ad.Date}\n\n🔗 <a href=\"https://www.marktplaats.nl{ad.Link}\">Bekijk advertentie</a>";
                 string encoded = Uri.EscapeDataString(message);
                 string silent = "";
                 if (IsNight())
                 {
                     silent = "&disable_notification=true";
                 }
-                if (photo != "")
+
+                if (ad.Photo != "")
                 {
-                    string encodedPhoto = Uri.EscapeDataString(photo);
+                    string encodedPhoto = Uri.EscapeDataString(ad.Photo);
                     await client.GetStringAsync(
                         $"https://api.telegram.org/bot{token}/sendPhoto?chat_id={chatId}&photo={encodedPhoto}&caption={encoded}&parse_mode=HTML{silent}");
                 }
