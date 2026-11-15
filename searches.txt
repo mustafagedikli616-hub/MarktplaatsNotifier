@@ -1,5 +1,3 @@
-# One search per line: search words;max price in euros
-# Lines starting with # are ignored.
 # This is an example, replace the searches with your own.
 # Format: search words;max price;category (category is optional)
 # Without a category, all of Marktplaats is searched.

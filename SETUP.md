@@ -66,11 +66,16 @@ The first round is quiet: the app remembers all current listings without sending
 Open **`searches.txt`** (in the same folder as the app) with Notepad. Every line is one search:
 
 ```
-defect monitor;60
-rtx 3060;110
+defect monitor;60;322
+rtx 3060;110;322
+iphone 13;250
 ```
 
-That's the **search words**, a **`;`**, then the **max price in euros**. Add, change or remove lines, save, and restart the app.
+That's the **search words**, a **`;`**, the **max price in euros**, and optionally another **`;`** with a **category number**. Add, change or remove lines, save, and restart the app.
+
+**Categories** keep your results clean: `322` means "only search in Computers en Software". Leave it out to search all of Marktplaats. The most common category numbers are listed at the top of `searches.txt`.
+
+Made a typo? The app tells you which line is wrong.
 
 **Tip:** after adding new searches, delete `seen.txt` before restarting. Otherwise you'll get all the old listings of the new search at once.
 
@@ -86,7 +91,8 @@ The app only checks while the black window is **open** and your computer is **aw
 
 | Problem | Fix |
 |---|---|
-| Error with **401** or **404** right after pasting the token | The token is wrong. Delete `secrets.txt` and start the app again. |
+| "That token doesn't work" | Copy the token from BotFather again, without spaces, and paste it. |
 | Nothing arrives | The first round is quiet. Wait a while, new listings don't appear every minute. |
 | I want to start over completely | Delete `secrets.txt` and `seen.txt`, then start the app. |
 | "Error with '...'" lines in the window | Usually a short internet hiccup. The app keeps going by itself. |
+| "Line ... in searches.txt is wrong" | Fix that line: `search words;price` or `search words;price;category`. Then start the app again. |

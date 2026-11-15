@@ -20,7 +20,10 @@ I built this to catch cheap broken monitors, PCs and PC parts to repair and rese
 - Shows "Bieden", "Gratis" or "Zie omschrijving" instead of a fake €0 price
 - Telegram messages with the listing **photo**, bold title, price, city and a link
 - Crash protection: a network hiccup or an odd listing is logged and skipped instead of stopping the bot
+- Optional **category per search**, so "pc defect" doesn't send you car parts
+- Skips "Gezocht" (wanted) ads and repair-service ads
 - Quiet first run, so you don't get flooded with hundreds of old listings
+- Friendly error messages: a typo in `searches.txt` or a wrong token is explained instead of crashing
 
 ## Built with
 
@@ -50,19 +53,24 @@ On the first launch, the app asks for your Telegram bot token and finds your cha
 
 ## Changing the searches
 
-Edit `searches.txt`. Each line is a search term, a `;` and its max price in euros:
+Edit `searches.txt`. Each line is a search term, a `;`, its max price in euros and optionally a `;` with a Marktplaats category ID:
 
 ```
-defect monitor;60
-rtx 3060;110
+defect monitor;60;322
+rtx 3060;110;322
+iphone 13;250
 ```
+
+With a category, only that category is searched (`322` = Computers en Software). Without one, all of Marktplaats is searched. A list of common category IDs is at the top of `searches.txt`.
+
+If a line has a mistake, the app tells you which line and what's wrong.
 
 Tip: after adding a new search, delete `seen.txt` so the first round is quiet again and you don't get all of that search's old listings.
 
 ## Roadmap
 
 - [ ] Allow pickup-only listings near my own city
-- [ ] Limit searches to specific Marktplaats categories
+- [x] Limit searches to specific Marktplaats categories
 - [ ] Run 24/7 on a small server
 
 ## Note
