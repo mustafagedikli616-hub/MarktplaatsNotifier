@@ -159,6 +159,9 @@ string FindBadFault(string text)
     }
     return "";
 }
+
+string postcode = "1055NE";
+int pickupKm = 5;
 bool IsNight()
 {
     int hour = DateTime.Now.Hour;
@@ -504,7 +507,7 @@ while (true)
 
         try
         {
-            string url = $"https://www.marktplaats.nl/lrp/api/search?query={Uri.EscapeDataString(search)}&limit=30&sortBy=SORT_INDEX&sortOrder=DECREASING";
+            string url = $"https://www.marktplaats.nl/lrp/api/search?query={Uri.EscapeDataString(search)}&limit=30&sortBy=SORT_INDEX&sortOrder=DECREASING&postcode={postcode}";
             if (categories[search] != "")
             {
                 url += $"&l1CategoryId={categories[search]}";
@@ -592,6 +595,11 @@ while (true)
 
                 string city = "Onbekend";
                 JsonElement location = listing.GetProperty("location");
+                int distanceKm = -1;
+                if (location.TryGetProperty("distanceMeters", out JsonElement distanceElement))
+                {
+                    distanceKm = distanceElement.GetInt32() / 1000;
+                }
 
                 if (location.TryGetProperty("cityName", out JsonElement cityElement))
                 {
@@ -621,9 +629,19 @@ while (true)
                 }
 
 
-                if (canShip == false)
+                bool isNearby = distanceKm >= 0 && distanceKm <= pickupKm;
+                if (!canShip && !isNearby)
                 {
                     continue;
+                }
+                string place = city;
+                if (distanceKm >= 0)
+                {
+                    place += $" ({distanceKm} km)";
+                }
+                if (!canShip)
+                {
+                    place += " · alleen ophalen";
                 }
 
                 string photo = "";
@@ -635,7 +653,7 @@ while (true)
 
                 string safeTitle = System.Net.WebUtility.HtmlEncode(title);
                 string message =
-                    $"<b>{safeTitle}</b>\n💶 {priceText}\n📍 {city}\n📅 {date}\n\n🔗 <a href=\"https://www.marktplaats.nl{link}\">Bekijk advertentie</a>";
+                    $"<b>{safeTitle}</b>\n💶 {priceText}\n📍 {place}\n📅 {date}\n\n🔗 <a href=\"https://www.marktplaats.nl{link}\">Bekijk advertentie</a>";
                 string encoded = Uri.EscapeDataString(message);
                 string silent = "";
                 if (IsNight())
