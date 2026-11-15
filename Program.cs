@@ -81,6 +81,7 @@ if (secrets.Length < 2)
 
 string token = secrets[0];
 string chatId = secrets[1];
+Telegram telegram = new Telegram(client, token, chatId);
 
 int lineNumber = 0;
 foreach (string line in lines)
@@ -178,18 +179,6 @@ bool IsNight()
 long lastUpdateId = 0;
 HashSet<string> quietSearches = new HashSet<string>();
 
-async Task SendText(string text, string keyboard = "")
-{
-    string url = $"https://api.telegram.org/bot{token}/sendMessage?chat_id={chatId}&text={Uri.EscapeDataString(text)}";
-    if (keyboard != "")
-    {
-        url += $"&reply_markup={Uri.EscapeDataString(keyboard)}";
-    }
-
-    await client.GetStringAsync(url);
-}
-
-
 string addStep = "";
 string pendingSearch = "";
 int pendingPrice = 0;
@@ -225,11 +214,11 @@ try
 
     if (searches.Count == 0)
     {
-        await SendText("The bot is running, Send /add to add your first search.");
+        await telegram.SendText("The bot is running, Send /add to add your first search.");
     }
     else
     {
-        await SendText($"✅ Bot started, watching {searches.Count} searches.");
+        await telegram.SendText($"✅ Bot started, watching {searches.Count} searches.");
     }
 }
 catch (Exception ex)
@@ -260,13 +249,13 @@ async Task StartAdd(string searchText)
     if (searches.ContainsKey(searchText))
     {
         addStep = "";
-        await SendText($"⚠️ \"{searchText}\" is already in your list.");
+        await telegram.SendText($"⚠️ \"{searchText}\" is already in your list.");
         return;
     }
 
     pendingSearch = searchText;
     addStep = "price";
-    await SendText($"💶 What's the max price for \"{searchText}\"?\nJust the number, like 140. (or /cancel)");
+    await telegram.SendText($"💶 What's the max price for \"{searchText}\"?\nJust the number, like 140. (or /cancel)");
 }
 
 async Task HandleAddStep(string text)
@@ -280,13 +269,13 @@ async Task HandleAddStep(string text)
         string priceInput = text.Replace("€", "").Trim();
         if (!int.TryParse(priceInput, out int price))
         {
-            await SendText("❌ Send just a number, like 140. (or /cancel)");
+            await telegram.SendText("❌ Send just a number, like 140. (or /cancel)");
             return;
         }
 
         pendingPrice = price;
         addStep = "category";
-        await SendText("📂 Which category? Tap a button, or send a category number.", categoryKeyboard);
+        await telegram.SendText("📂 Which category? Tap a button, or send a category number.", categoryKeyboard);
     }
     else if (addStep == "category")
     {
@@ -301,7 +290,7 @@ async Task HandleAddStep(string text)
         }
         else
         {
-            await SendText("❌ Tap one of the buttons, or send a category number. (or /cancel)", categoryKeyboard);
+            await telegram.SendText("❌ Tap one of the buttons, or send a category number. (or /cancel)", categoryKeyboard);
             return;
         }
 
@@ -312,7 +301,7 @@ async Task HandleAddStep(string text)
         }
 
         addStep = "";
-        await SendText(AddSearch(line), removeKeyboard);
+        await telegram.SendText(AddSearch(line), removeKeyboard);
     }
 }
 
@@ -459,7 +448,7 @@ async Task CheckCommands()
 
             if (text == "/cancel")
             {
-                await SendText("👍 Cancelled.", removeKeyboard);
+                await telegram.SendText("👍 Cancelled.", removeKeyboard);
             }
             else if (text == "/add" || text.StartsWith("/add "))
             {
@@ -467,12 +456,12 @@ async Task CheckCommands()
                 if (rest.Contains(";"))
                 {
                     // Quick version: /add rtx 3070;140;322
-                    await SendText(AddSearch(rest));
+                    await telegram.SendText(AddSearch(rest));
                 }
                 else if (rest == "")
                 {
                     addStep = "search";
-                    await SendText("🔎 What do you want to search for? (or /cancel)");
+                    await telegram.SendText("🔎 What do you want to search for? (or /cancel)");
                 }
                 else
                 {
@@ -481,19 +470,19 @@ async Task CheckCommands()
             }
             else if (text == "/remove")
             {
-                await SendText("Type the search after /remove, like: /remove rtx 3070\n\n" + ListSearches());
+                await telegram.SendText("Type the search after /remove, like: /remove rtx 3070\n\n" + ListSearches());
             }
             else if (text.StartsWith("/remove "))
             {
-                await SendText(RemoveSearch(text.Substring(8).Trim()));
+                await telegram.SendText(RemoveSearch(text.Substring(8).Trim()));
             }
             else if (text == "/list")
             {
-                await SendText(ListSearches());
+                await telegram.SendText(ListSearches());
             }
             else if (text == "/help" || text == "/start")
             {
-                await SendText(helpText);
+                await telegram.SendText(helpText);
             }
         }
     }
@@ -589,42 +578,10 @@ while (true)
                     continue;
                 }
 
-                string place = ad.City;
-                if (ad.DistanceKm >= 0)
-                {
-                    place += $" ({ad.DistanceKm} km)";
-                }
-
-                if (!ad.CanShip)
-                {
-                    place += " · alleen ophalen";
-                }
-
-
-                string safeTitle = System.Net.WebUtility.HtmlEncode(ad.Title);
-                string message =
-                    $"<b>{safeTitle}</b>\n💶 {ad.PriceText}\n📍 {place}\n📅 {ad.Date}\n\n🔗 <a href=\"https://www.marktplaats.nl{ad.Link}\">Bekijk advertentie</a>";
-                string encoded = Uri.EscapeDataString(message);
-                string silent = "";
-                if (IsNight())
-                {
-                    silent = "&disable_notification=true";
-                }
-
-                if (ad.Photo != "")
-                {
-                    string encodedPhoto = Uri.EscapeDataString(ad.Photo);
-                    await client.GetStringAsync(
-                        $"https://api.telegram.org/bot{token}/sendPhoto?chat_id={chatId}&photo={encodedPhoto}&caption={encoded}&parse_mode=HTML{silent}");
-                }
-                else
-                {
-                    await client.GetStringAsync(
-                        $"https://api.telegram.org/bot{token}/sendMessage?chat_id={chatId}&text={encoded}&parse_mode=HTML{silent}");
-                }
-
+                
+                await telegram.SendListing(ad, IsNight());
                 await Task.Delay(1000);
-                Console.WriteLine(message);
+                Console.WriteLine($"Sent: {ad.Title}");
                 Console.WriteLine();
             }
         }
