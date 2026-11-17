@@ -19,16 +19,13 @@ void StopWithError(string message)
 HttpClient client = new HttpClient();
 client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0");
 
-Dictionary<string, int> searches = new Dictionary<string, int>();
-if (!File.Exists("searches.txt"))
+SearchList searchList = new SearchList();
+string loadError = searchList.Load();
+if (loadError != "")
 {
-    File.WriteAllText("searches.txt",
-        "# One search per line: search words;max price;category\n# Example: defect monitor;60;322\n");
+    StopWithError(loadError);
 }
 
-Dictionary<string, string> categories = new Dictionary<string, string>();
-
-string[] lines = File.ReadAllLines("searches.txt");
 if (!File.Exists("secrets.txt"))
 {
     string newToken = "";
@@ -83,51 +80,6 @@ string token = secrets[0];
 string chatId = secrets[1];
 Telegram telegram = new Telegram(client, token, chatId);
 
-int lineNumber = 0;
-foreach (string line in lines)
-{
-    lineNumber++;
-    if (line.Trim() == "" || line.Trim().StartsWith("#"))
-    {
-        continue;
-    }
-
-    string[] parts = line.Split(';');
-    if (parts.Length < 2 || parts[0].Trim() == "")
-    {
-        StopWithError(
-            $"Line {lineNumber} in searches.txt is wrong: \"{line}\"\nUse: search words;max price (for example: defect monitor;60)");
-    }
-
-    string searchText = parts[0].Trim();
-
-    if (!int.TryParse(parts[1].Trim(), out int limit))
-    {
-        StopWithError(
-            $"Line {lineNumber} in searches.txt: \"{parts[1].Trim()}\" is not a valid price. Use whole euros, like 60.");
-    }
-
-    string category = "";
-    if (parts.Length > 2)
-    {
-        category = parts[2].Trim();
-    }
-
-    if (category != "" && !int.TryParse(category, out _))
-    {
-        StopWithError(
-            $"Line {lineNumber} in searches.txt: \"{category}\" is not a valid category. Use a number like 322, or leave it out.");
-    }
-
-    if (searches.ContainsKey(searchText))
-    {
-        StopWithError($"Line {lineNumber} in searches.txt: \"{searchText}\" is in the file twice. Remove one of them.");
-    }
-
-    searches.Add(searchText, limit);
-    categories.Add(searchText, category);
-}
-
 
 HashSet<string> seenIds = new HashSet<string>();
 if (File.Exists("seen.txt"))
@@ -140,19 +92,12 @@ if (File.Exists("seen.txt"))
 }
 
 
-
-
-
-
-
 string postcode = "1055NE";
 int pickupKm = 5;
 
 
-
-
 long lastUpdateId = 0;
-HashSet<string> quietSearches = new HashSet<string>();
+
 
 string addStep = "";
 string pendingSearch = "";
@@ -187,13 +132,13 @@ try
     await client.GetStringAsync(
         $"https://api.telegram.org/bot{token}/setMyCommands?commands={Uri.EscapeDataString(commandsJson)}");
 
-    if (searches.Count == 0)
+    if (searchList.Prices.Count == 0)
     {
         await telegram.SendText("The bot is running, Send /add to add your first search.");
     }
     else
     {
-        await telegram.SendText($"✅ Bot started, watching {searches.Count} searches.");
+        await telegram.SendText($"✅ Bot started, watching {searchList.Prices.Count} searches.");
     }
 }
 catch (Exception ex)
@@ -221,7 +166,7 @@ string removeKeyboard = "{\"remove_keyboard\":true}";
 
 async Task StartAdd(string searchText)
 {
-    if (searches.ContainsKey(searchText))
+    if (searchList.Prices.ContainsKey(searchText))
     {
         addStep = "";
         await telegram.SendText($"⚠️ \"{searchText}\" is already in your list.");
@@ -265,7 +210,8 @@ async Task HandleAddStep(string text)
         }
         else
         {
-            await telegram.SendText("❌ Tap one of the buttons, or send a category number. (or /cancel)", categoryKeyboard);
+            await telegram.SendText("❌ Tap one of the buttons, or send a category number. (or /cancel)",
+                categoryKeyboard);
             return;
         }
 
@@ -276,100 +222,10 @@ async Task HandleAddStep(string text)
         }
 
         addStep = "";
-        await telegram.SendText(AddSearch(line), removeKeyboard);
+        await telegram.SendText(searchList.Add(line), removeKeyboard);
     }
 }
 
-string AddSearch(string line)
-{
-    string[] parts = line.Split(';');
-    if (parts.Length < 2 || parts[0].Trim() == "")
-    {
-        return "❌ Use: /add search words;max price;category (category is optional)\nExample: /add rtx 3070;140;322";
-    }
-
-    string searchText = parts[0].Trim();
-
-    if (!int.TryParse(parts[1].Trim(), out int limit))
-    {
-        return $"❌ \"{parts[1].Trim()}\" is not a valid price. Use whole euros, like 140.";
-    }
-
-    string category = "";
-    if (parts.Length > 2)
-    {
-        category = parts[2].Trim();
-    }
-
-    if (category != "" && !int.TryParse(category, out _))
-    {
-        return $"❌ \"{category}\" is not a valid category. Use a number like 322, or leave it out.";
-    }
-
-    if (searches.ContainsKey(searchText))
-    {
-        return $"⚠️ \"{searchText}\" is already in your list.";
-    }
-
-    searches.Add(searchText, limit);
-    categories.Add(searchText, category);
-    quietSearches.Add(searchText);
-
-    string newLine = $"{searchText};{limit}";
-    if (category != "")
-    {
-        newLine += $";{category}";
-    }
-
-    string fileText = File.ReadAllText("searches.txt");
-    if (fileText != "" && !fileText.EndsWith("\n"))
-    {
-        File.AppendAllText("searches.txt", "\n");
-    }
-
-    File.AppendAllText("searches.txt", newLine + "\n");
-
-    return $"✅ Added: {searchText} (max €{limit})";
-}
-
-string RemoveSearch(string searchText)
-{
-    if (!searches.ContainsKey(searchText))
-    {
-        return $"❌ \"{searchText}\" is not in your list. Send /list to see your searches.";
-    }
-
-    searches.Remove(searchText);
-    categories.Remove(searchText);
-
-    List<string> keptLines = new List<string>();
-    foreach (string fileLine in File.ReadAllLines("searches.txt"))
-    {
-        bool isComment = fileLine.Trim().StartsWith("#");
-        string lineSearch = fileLine.Split(';')[0].Trim();
-        if (!isComment && lineSearch == searchText)
-        {
-            continue;
-        }
-
-        keptLines.Add(fileLine);
-    }
-
-    File.WriteAllLines("searches.txt", keptLines);
-
-    return $"🗑️ Removed: {searchText}";
-}
-
-string ListSearches()
-{
-    string text = $"📋 Your searches ({searches.Count}):\n";
-    foreach (KeyValuePair<string, int> pair in searches)
-    {
-        text += $"\n• {pair.Key} (max €{pair.Value})";
-    }
-
-    return text;
-}
 
 string helpText = "🤖 Commands:\n\n" +
                   "/add - add a search, the bot asks you the price and category\n" +
@@ -431,7 +287,7 @@ async Task CheckCommands()
                 if (rest.Contains(";"))
                 {
                     // Quick version: /add rtx 3070;140;322
-                    await telegram.SendText(AddSearch(rest));
+                    await telegram.SendText(searchList.Add(rest));
                 }
                 else if (rest == "")
                 {
@@ -445,15 +301,16 @@ async Task CheckCommands()
             }
             else if (text == "/remove")
             {
-                await telegram.SendText("Type the search after /remove, like: /remove rtx 3070\n\n" + ListSearches());
+                await telegram.SendText("Type the search after /remove, like: /remove rtx 3070\n\n" +
+                                        searchList.ListText());
             }
             else if (text.StartsWith("/remove "))
             {
-                await telegram.SendText(RemoveSearch(text.Substring(8).Trim()));
+                await telegram.SendText(searchList.Remove(text.Substring(8).Trim()));
             }
             else if (text == "/list")
             {
-                await telegram.SendText(ListSearches());
+                await telegram.SendText(searchList.ListText());
             }
             else if (text == "/help" || text == "/start")
             {
@@ -471,27 +328,27 @@ bool firstRound = true;
 while (true)
 {
     Console.WriteLine("Checking...");
-    foreach (KeyValuePair<string, int> pair in searches.ToList())
+    foreach (KeyValuePair<string, int> pair in searchList.Prices.ToList())
     {
         string search = pair.Key;
         int maxPrice = pair.Value;
 
 
-        if (!searches.ContainsKey(search))
+        if (!searchList.Prices.ContainsKey(search))
         {
             continue;
         }
 
 
-        bool quiet = firstRound || quietSearches.Contains(search);
+        bool quiet = firstRound || searchList.NewSearches.Contains(search);
 
         try
         {
             string url =
                 $"https://www.marktplaats.nl/lrp/api/search?query={Uri.EscapeDataString(search)}&limit=30&sortBy=SORT_INDEX&sortOrder=DECREASING&postcode={postcode}";
-            if (categories[search] != "")
+            if (searchList.Categories[search] != "")
             {
-                url += $"&l1CategoryId={categories[search]}";
+                url += $"&l1CategoryId={searchList.Categories[search]}";
             }
 
             string json = await client.GetStringAsync(url);
@@ -523,6 +380,7 @@ while (true)
                 {
                     continue;
                 }
+
                 Listing ad = Listing.FromJson(listing);
 
 
@@ -552,7 +410,7 @@ while (true)
                     continue;
                 }
 
-                
+
                 await telegram.SendListing(ad, Filters.IsNight());
                 await Task.Delay(1000);
                 Console.WriteLine($"Sent: {ad.Title}");
@@ -564,7 +422,7 @@ while (true)
             Console.WriteLine($"Error with '{search}': {ex.Message}");
         }
 
-        quietSearches.Remove(search);
+        searchList.NewSearches.Remove(search);
         await CheckCommands();
         await Task.Delay(2000);
     }

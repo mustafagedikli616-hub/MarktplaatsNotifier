@@ -1,51 +1,121 @@
-# This is an example, replace the searches with your own.
-# Format: search words;max price;category (category is optional)
-# Without a category, all of Marktplaats is searched.
-# Categories: 322 = Computers en Software, 31 = Audio, Tv en Foto,
-#   356 = Spelcomputers en Games, 820 = Telecommunicatie,
-#   2600 = Auto-onderdelen, 445 = Fietsen en Brommers,
-#   537 = Witgoed en Apparatuur, 504 = Huis en Inrichting
+# =====================================================
+# searches.txt - format: search words;max price;category
+# 322 = Computers en Software, 356 = Spelcomputers, 31 = Audio Tv en Foto
+# Lines starting with # are switched off
+# Max prices follow the buy rules: broken <= 30-40% of resale,
+# working but underpriced <= 55%, never above 150
+# =====================================================
+
+# ---------- MONITORS: broken (backlight / power board / T-con) ----------
 defect monitor;60;322
-monitor geen beeld;60;322
 monitor kapot;60;322
-4k 144hz monitor;120;322
-1440p 144hz monitor;80;322
-ultrawide monitor;100;322
-pc defect;100;322
-game pc defect;150;322
-gaming pc moet weg;150;322
-pc start niet op;100;322
-videokaart defect;60;322
-rtx 3060;110;322
-rx 6600;90;322
-ddr4 32gb;130;322
-moederbord b550;45;322
-gaming laptop defect;150;322
-# Monitors: backlight / power board faults
+monitor geen beeld;60;322
+monitor gaat niet aan;50;322
 monitor beeld valt weg;50;322
 monitor knippert;50;322
-monitor gaat niet aan;50;322
-curved monitor defect;80;322
+monitor zwart scherm;50;322
+monitor gaat aan en uit;50;322
+ultrawide defect;80;322
+34 inch monitor defect;80;322
+curved monitor defect;70;322
+4k monitor defect;100;322
+monitor defekt;60;322
 
-# PCs: easy fixes (RAM, PSU, SSD, Windows, cleaning)
+# ---------- MONITORS: brand + broken (titles without the word "monitor") ----------
+samsung odyssey defect;90;322
+lg ultragear defect;70;322
+xiaomi monitor;80;322
+aoc defect;50;322
+dell monitor defect;50;322
+asus rog monitor defect;90;322
+msi monitor defect;60;322
+
+# ---------- MONITORS: looks broken, often isn't ----------
+# "geen signaal" is often a cable or PC problem, the monitor itself is fine
+monitor geen signaal;50;322
+# works fine, just missing the stand: a VESA stand or arm costs about 15 euro
+monitor zonder voet;50;322
+monitor zonder standaard;50;322
+# missing power brick: a universal 12-19V adapter costs about 10-15 euro
+monitor zonder adapter;40;322
+monitor zonder voeding;40;322
+# cosmetic flaws: big discount, small problem
+monitor dode pixel;70;322
+monitor kras;70;322
+
+# ---------- MONITORS: working but underpriced (also for your own 4K 144Hz) ----------
+4k 144hz monitor;150;322
+gigabyte m28u;150;322
+1440p 144hz monitor;80;322
+ultrawide monitor;100;322
+
+# ---------- PCs: broken or misdiagnosed ----------
+pc defect;100;322
+game pc defect;150;322
+gaming pc kapot;150;322
+computer defect;80;322
+pc start niet op;100;322
+pc gaat niet aan;100;322
 pc geen beeld;80;322
 pc valt uit;100;322
 pc blauw scherm;100;322
+# beeping = usually RAM or GPU not seated, sellers think it's dead
+pc piept;80;322
 windows start niet op;80;322
+pc defekt;100;322
 
-# Mini PCs: easy to resell, also handy for running your bot 24/7
-lenovo thinkcentre tiny;80;322
-dell optiplex micro;80;322
-hp elitedesk mini;80;322
+# ---------- PCs: niche ----------
+# test it with your own PSU
+pc zonder voeding;80;322
+pc zonder ssd;100;322
+gaming pc moet weg;150;322
 
-# TVs: same backlight fault as monitors
-tv geen beeld wel geluid;60;31
+# ---------- Mini PCs (24/7 bot server + easy flips) ----------
+lenovo tiny;80;322
+optiplex micro;80;322
+elitedesk mini;80;322
+prodesk mini;70;322
+intel nuc;70;322
+
+# ---------- GPUs: easy fixes (new fan, new paste, new pads, no soldering) ----------
+videokaart fan kapot;80;322
+videokaart ventilator defect;80;322
+videokaart wordt heet;90;322
+videokaart oververhit;90;322
+
+# ---------- GPUs: working but underpriced ----------
+rtx 3060;110;322
+rtx 3070;140;322
+rx 6600;90;322
+
+# ---------- RAM / SSD (prices are high, so flip the cheap ones) ----------
+ddr4 32gb;75;322
+ddr4 16gb;35;322
+ram partij;60;322
+nvme 1tb;40;322
+ssd 1tb;40;322
+moederbord b550;45;322
+
+# ---------- Parts for your own quiet PC ----------
+corsair rm650x;45;322
+corsair rm750x;55;322
+seasonic focus;50;322
 pc behuizing;20;322
 pc kast;20;322
-nzxt h510;25;322
-fractal design;30;322
-
-# Case fans
 arctic p12;12;322
-case fans;10;322
-behuizing ventilatoren;10;322
+
+# ---------- Consoles (cleaning, repaste, part swaps, no soldering) ----------
+ps4 pro defect;50;356
+# loud = dusty, needs cleaning and new paste
+ps4 maakt veel herrie;70;356
+ps4 oververhit;60;356
+# the internal PSU is a plug-in swap
+xbox one s gaat niet aan;40;356
+# new sticks cost about 3 euro, no soldering
+joycon drift;8;356
+
+# ---------- Switched off (no car, or beyond your current skills) ----------
+# tv geen beeld wel geluid;60;31
+# laptop zonder oplader;50;322
+# gaming laptop defect;150;322
+# videokaart defect;40;322
