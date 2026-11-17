@@ -53,7 +53,11 @@ The notifications come from your own private bot. Telegram's official **BotFathe
 
    ![Sending the first message to your bot](docs/setup/4-message-bot.png)
 
-4. The window says **"Setup done!"**. That's it! 🎉
+4. The window says **"Setup done!"**.
+5. It asks for your **postcode**, like `1234AB`. This is used to show how far away a listing is.
+6. It asks **how many km you'll travel** to pick something up. Listings that can't be shipped are only sent if they're within this distance. Type `0` if you only want listings that can be shipped.
+
+That's it! 🎉 You won't be asked these questions again.
 
 The first round is quiet: the app remembers all current listings without sending them. From then on, you'll only get **new** listings.
 
@@ -110,7 +114,8 @@ The app only checks while the black window is **open** and your computer is **aw
 | Problem | Fix |
 |---|---|
 | "That token doesn't work" | Copy the token from BotFather again, without spaces, and paste it. |
-| Nothing arrives | The first round is quiet. Wait a while, new listings don't appear every minute. |
+| Nothing arrives | The first round is quiet, and one round takes a few minutes. Wait a while, new listings don't appear every minute. |
+| I moved, or want a different pickup distance | Open `secrets.txt` with Notepad. Line 3 is your postcode, line 4 the distance in km. Change them, save, and restart the app. |
 | I want to start over completely | Delete `secrets.txt` and `seen.txt`, then start the app. |
 | "Error with '...'" lines in the window | Usually a short internet hiccup. The app keeps going by itself. |
 | "Line ... in searches.txt is wrong" | Fix that line. The format is `search words;price;category;skip words;urgent`, and only the first two parts are required. Then start the app again. |

@@ -1,121 +1,124 @@
 # =====================================================
-# searches.txt - format: search words;max price;category
-# 322 = Computers en Software, 356 = Spelcomputers, 31 = Audio Tv en Foto
+# searches.txt - format: search words;max price;category;skip words;urgent
+# skip words (optional): comma separated, a listing with one of them is skipped (e.g. barst,strepen)
+# urgent (optional, 5th part): every new listing makes a sound, even at night. No skip words? use ;; (e.g. ps5 defect;120;356;;urgent)
+# 322 = Computers en Software, 356 = Spelcomputers, 31 = Audio Tv en Foto, 820 = Telecommunicatie
 # Lines starting with # are switched off
 # Max prices follow the buy rules: broken <= 30-40% of resale,
 # working but underpriced <= 55%, never above 150
 # =====================================================
 
 # ---------- MONITORS: broken (backlight / power board / T-con) ----------
-defect monitor;60;322
-monitor kapot;60;322
-monitor geen beeld;60;322
-monitor gaat niet aan;50;322
-monitor beeld valt weg;50;322
-monitor knippert;50;322
-monitor zwart scherm;50;322
-monitor gaat aan en uit;50;322
-ultrawide defect;80;322
-34 inch monitor defect;80;322
-curved monitor defect;70;322
-4k monitor defect;100;322
-monitor defekt;60;322
+defect monitor;100;322;barst,gebarsten,strepen,lijnen,waterschade
+monitor kapot;60;322;barst,gebarsten,strepen,lijnen,waterschade
+monitor geen beeld;60;322;barst,gebarsten,strepen,lijnen,waterschade
+monitor gaat niet aan;50;322;barst,gebarsten,strepen,lijnen,waterschade
+monitor knippert;50;322;barst,gebarsten,strepen,lijnen,waterschade
+monitor zwart scherm;50;322;barst,gebarsten,strepen,lijnen,waterschade
 
 # ---------- MONITORS: brand + broken (titles without the word "monitor") ----------
-samsung odyssey defect;90;322
-lg ultragear defect;70;322
-xiaomi monitor;80;322
-aoc defect;50;322
-dell monitor defect;50;322
-asus rog monitor defect;90;322
-msi monitor defect;60;322
+samsung odyssey defect;90;322;barst,gebarsten,strepen,lijnen,waterschade
+lg ultragear defect;70;322;barst,gebarsten,strepen,lijnen,waterschade
+xiaomi monitor;80;322;barst,gebarsten,strepen,lijnen,waterschade
+aoc defect;50;322;barst,gebarsten,strepen,lijnen,waterschade
+dell monitor defect;50;322;barst,gebarsten,strepen,lijnen,waterschade
+asus rog monitor defect;90;322;barst,gebarsten,strepen,lijnen,waterschade
+msi monitor defect;60;322;barst,gebarsten,strepen,lijnen,waterschade
 
 # ---------- MONITORS: looks broken, often isn't ----------
 # "geen signaal" is often a cable or PC problem, the monitor itself is fine
-monitor geen signaal;50;322
+monitor geen signaal;50;322;barst,gebarsten,strepen,lijnen,waterschade
 # works fine, just missing the stand: a VESA stand or arm costs about 15 euro
-monitor zonder voet;50;322
-monitor zonder standaard;50;322
+monitor zonder voet;50;322;barst,gebarsten,strepen,lijnen,waterschade
 # missing power brick: a universal 12-19V adapter costs about 10-15 euro
-monitor zonder adapter;40;322
-monitor zonder voeding;40;322
+monitor zonder adapter;40;322;barst,gebarsten,strepen,lijnen,waterschade
 # cosmetic flaws: big discount, small problem
-monitor dode pixel;70;322
-monitor kras;70;322
+monitor dode pixel;70;322;barst,gebarsten,strepen,lijnen,waterschade
+monitor kras;70;322;barst,gebarsten,strepen,lijnen,waterschade
 
 # ---------- MONITORS: working but underpriced (also for your own 4K 144Hz) ----------
-4k 144hz monitor;150;322
-gigabyte m28u;150;322
-1440p 144hz monitor;80;322
-ultrawide monitor;100;322
+4k 144hz monitor;150;322;barst,gebarsten,strepen,lijnen,waterschade
+gigabyte m28u;150;322;barst,gebarsten,strepen,lijnen,waterschade
+1440p 144hz monitor;80;322;barst,gebarsten,strepen,lijnen,waterschade
+ultrawide monitor;100;322;barst,gebarsten,strepen,lijnen,waterschade
 
 # ---------- PCs: broken or misdiagnosed ----------
-pc defect;100;322
-game pc defect;150;322
-gaming pc kapot;150;322
-computer defect;80;322
-pc start niet op;100;322
-pc gaat niet aan;100;322
-pc geen beeld;80;322
-pc valt uit;100;322
-pc blauw scherm;100;322
+pc defect;100;322;waterschade
+game pc defect;150;322;waterschade
+pc start niet op;100;322;waterschade
+pc gaat niet aan;100;322;waterschade
+pc geen beeld;80;322;waterschade
+pc valt uit;100;322;waterschade
+pc blauw scherm;100;322;waterschade
 # beeping = usually RAM or GPU not seated, sellers think it's dead
-pc piept;80;322
-windows start niet op;80;322
-pc defekt;100;322
+pc piept;80;322;waterschade
+windows start niet op;80;322;waterschade
 
 # ---------- PCs: niche ----------
 # test it with your own PSU
-pc zonder voeding;80;322
-pc zonder ssd;100;322
-gaming pc moet weg;150;322
+pc zonder voeding;80;322;waterschade
+pc zonder ssd;100;322;waterschade
+gaming pc moet weg;150;322;waterschade
 
 # ---------- Mini PCs (24/7 bot server + easy flips) ----------
-lenovo tiny;80;322
-optiplex micro;80;322
-elitedesk mini;80;322
-prodesk mini;70;322
-intel nuc;70;322
+lenovo tiny;80;322;waterschade
+optiplex micro;80;322;waterschade
+elitedesk mini;80;322;waterschade
+prodesk mini;70;322;waterschade
+intel nuc;70;322;waterschade
 
 # ---------- GPUs: easy fixes (new fan, new paste, new pads, no soldering) ----------
-videokaart fan kapot;80;322
-videokaart ventilator defect;80;322
-videokaart wordt heet;90;322
-videokaart oververhit;90;322
+videokaart fan kapot;80;322;waterschade
+videokaart wordt heet;90;322;waterschade
 
 # ---------- GPUs: working but underpriced ----------
-rtx 3060;110;322
-rtx 3070;140;322
-rx 6600;90;322
+rtx 3060;110;322;waterschade
+rtx 3070;140;322;waterschade
+rx 6600;90;322;waterschade
 
 # ---------- RAM / SSD (prices are high, so flip the cheap ones) ----------
-ddr4 32gb;75;322
-ddr4 16gb;35;322
-ram partij;60;322
-nvme 1tb;40;322
-ssd 1tb;40;322
-moederbord b550;45;322
+ddr4 32gb;75;322;waterschade
+ddr4 16gb;35;322;waterschade
+ram partij;60;322;waterschade
+nvme 1tb;40;322;waterschade
+ssd 1tb;40;322;waterschade
+moederbord b550;45;322;waterschade
 
 # ---------- Parts for your own quiet PC ----------
-corsair rm650x;45;322
-corsair rm750x;55;322
-seasonic focus;50;322
-pc behuizing;20;322
-pc kast;20;322
-arctic p12;12;322
+corsair rm650x;45;322;waterschade
+corsair rm750x;55;322;waterschade
+seasonic focus;50;322;waterschade
+pc behuizing;20;322;waterschade
+pc kast;20;322;waterschade
+arctic p12;12;322;waterschade
 
 # ---------- Consoles (cleaning, repaste, part swaps, no soldering) ----------
-ps4 pro defect;50;356
-# loud = dusty, needs cleaning and new paste
-ps4 maakt veel herrie;70;356
-ps4 oververhit;60;356
-# the internal PSU is a plug-in swap
-xbox one s gaat niet aan;40;356
-# new sticks cost about 3 euro, no soldering
-joycon drift;8;356
+ps4 pro defect;50;356;waterschade
+
+ps4 maakt veel herrie;70;356;waterschade
+ps4 oververhit;60;356;waterschade
+
+xbox one s gaat niet aan;40;356;waterschade
+
+joycon drift;8;356;waterschade
 
 # ---------- Switched off (no car, or beyond your current skills) ----------
-# tv geen beeld wel geluid;60;31
-# laptop zonder oplader;50;322
-# gaming laptop defect;150;322
-# videokaart defect;40;322
+# tv geen beeld wel geluid;60;31;waterschade
+# laptop zonder oplader;50;322;waterschade
+# gaming laptop defect;150;322;waterschade
+# videokaart defect;40;322;waterschade
+ps5 defect;120;356;waterschade
+ps5 gaat niet aan;120;356;waterschade
+ps5 valt uit;120;356;waterschade
+ps5 disc drive defect;150;356;waterschade
+ps5 geen beeld;80;356;waterschade
+
+# ---------- PHONES: for mom (big screen, fast, screen/battery/port fixes) ----------
+galaxy a55 defect;60;820;waterschade
+galaxy a55 scherm kapot;60;820;waterschade
+galaxy a55 laadt niet op;60;820;waterschade
+galaxy a54 defect;50;820;waterschade
+galaxy a54 scherm kapot;50;820;waterschade
+galaxy a35 scherm kapot;45;820;waterschade
+galaxy a53 scherm kapot;35;820;waterschade
+

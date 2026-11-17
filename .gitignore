@@ -15,3 +15,7 @@ seen.txt
 *~
 publish/
 *.zip
+
+# Backups
+*.bak
+*.bak2

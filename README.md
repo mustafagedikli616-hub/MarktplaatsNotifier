@@ -4,7 +4,7 @@
 ![.NET](https://img.shields.io/badge/.NET-512BD4?logo=dotnet&logoColor=white)
 ![Telegram](https://img.shields.io/badge/Telegram_Bot-26A5E4?logo=telegram&logoColor=white)
 
-A C# console app that watches [Marktplaats.nl](https://www.marktplaats.nl) searches and sends new listings straight to your phone via Telegram, within about a minute of being posted. Much faster than Marktplaats' own saved searches.
+A C# console app that watches [Marktplaats.nl](https://www.marktplaats.nl) searches and sends new listings straight to your phone via Telegram, usually within a few minutes of being posted. Much faster than Marktplaats' own saved searches.
 
 I built this to catch cheap broken monitors, PCs and PC parts to repair and resell, before anyone else sees them.
 
@@ -14,7 +14,7 @@ I built this to catch cheap broken monitors, PCs and PC parts to repair and rese
 
 ## Features
 
-- Checks multiple searches every ~minute, each with its **own max price**, newest listings first
+- Checks all your searches in rounds, each with its **own max price**, newest listings first (a round takes about 3 seconds per search)
 - Only sends **new** listings — seen listing IDs are saved to a file, so nothing is sent twice, even after a restart
 - Telegram messages with the listing **photo**, bold title, price, city, distance, date and a link
 - Shows "Bieden", "Gratis" or "Zie omschrijving" instead of a fake €0 price
@@ -23,7 +23,7 @@ I built this to catch cheap broken monitors, PCs and PC parts to repair and rese
 - 🚨 **Super deal alerts**: a fixed price at or below half of the search's max price gets a loud 🚨 SUPER DEAL 🚨 message
 - 🚨 **Urgent searches**: mark a search as `urgent` and every new listing from it gets a loud 🚨 URGENT 🚨 message
 - **Quiet nights**: between 23:00 and 07:00 normal listings arrive silently, super deals and urgent searches still make a sound
-- **Shipping or nearby**: listings must offer shipping, or be pickup-only within a few km of your postcode
+- **Shipping or nearby**: listings must offer shipping, or be pickup-only within the distance you chose from your postcode
 - **Telegram commands** to manage your searches from your phone: `/add` (with category buttons), `/remove`, `/list`, `/cancel`, `/help`
 - Skips "Gezocht" (wanted), "Inkoop" (buying) and repair-service ads
 - Quiet first round after every start, so you don't get flooded with hundreds of old listings
@@ -45,6 +45,8 @@ I built this to catch cheap broken monitors, PCs and PC parts to repair and rese
 4. Decides if a listing is a super deal or comes from an urgent search
 5. Sends the rest to Telegram with the Bot API (`sendPhoto` / `sendMessage`, HTML formatting), silently at night unless it's urgent
 
+📖 Want to know what every file and method does? See [**How it works (code guide)**](docs/HOW-IT-WORKS.md).
+
 ## Setup
 
 👉 **Not a programmer?** Follow the step-by-step [**Setup guide**](SETUP.md). No coding needed.
@@ -55,7 +57,7 @@ I built this to catch cheap broken monitors, PCs and PC parts to repair and rese
 dotnet run
 ```
 
-On the first launch, the app asks for your Telegram bot token and finds your chat ID by itself. Both are saved to `secrets.txt`, which is in `.gitignore`.
+On the first launch, the app asks for your Telegram bot token, finds your chat ID by itself, and asks for your postcode and how far you'll travel for pickup. Everything is saved to `secrets.txt`, which is in `.gitignore`, so your token and postcode never end up on GitHub.
 
 ## Changing the searches
 
@@ -99,8 +101,11 @@ Common category IDs: `322` = Computers en Software, `356` = Spelcomputers en Gam
 - [x] Manage searches from Telegram
 - [x] Skip words per search
 - [x] Super deal and urgent alerts
-- [ ] Postcode and pickup distance as a setting (now set in `Program.cs`)
+- [x] Postcode and pickup distance asked at the first launch
 - [ ] Skip words and urgent in the Telegram `/add` flow
+- [ ] Telegram warning after several errors in a row, and slowing down on a 429 "too many requests"
+- [ ] One request per category instead of one per search, so a round takes seconds instead of minutes
+- [ ] Multi-user: one bot for friends, each with their own searches
 - [ ] Run 24/7 on a small server
 
 ## Note

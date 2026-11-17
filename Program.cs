@@ -78,6 +78,44 @@ if (secrets.Length < 2)
 
 string token = secrets[0];
 string chatId = secrets[1];
+if (secrets.Length < 4)
+{
+    string newPostcode = "";
+    while (newPostcode == "")
+    {
+        Console.Write("Your postcode (like 1234AB): ");
+        string input = Console.ReadLine().Trim().ToUpper().Replace(" ", "");
+
+        if (input.Length == 6 && int.TryParse(input.Substring(0, 4), out _) && char.IsLetter(input[4]) && char.IsLetter(input[5]))
+        {
+            newPostcode = input;
+        }
+        else
+        {
+            Console.WriteLine("That's not a Dutch postcode. Use 4 numbers and 2 letters, like 1234AB.");
+        }
+    }
+
+    int newPickupKm = -1;
+    while (newPickupKm < 0)
+    {
+        Console.Write("How many km will you travel to pick something up? (0 = shipping only): ");
+        if (int.TryParse(Console.ReadLine().Trim(), out int km) && km >= 0)
+        {
+            newPickupKm = km;
+        }
+        else
+        {
+            Console.WriteLine("Type a whole number, like 5.");
+        }
+    }
+
+    File.WriteAllLines("secrets.txt", new string[] { token, chatId, newPostcode, newPickupKm.ToString() });
+    secrets = File.ReadAllLines("secrets.txt");
+}
+
+string postcode = secrets[2];
+int pickupKm = int.Parse(secrets[3]);
 Telegram telegram = new Telegram(client, token, chatId);
 
 
@@ -92,8 +130,6 @@ if (File.Exists("seen.txt"))
 }
 
 
-string postcode = "1055NE";
-int pickupKm = 5;
 
 
 long lastUpdateId = 0;
@@ -327,6 +363,7 @@ async Task CheckCommands()
 bool firstRound = true;
 while (true)
 {
+    System.Diagnostics.Stopwatch timer = System.Diagnostics.Stopwatch.StartNew();
     Console.WriteLine("Checking...");
     foreach (KeyValuePair<string, int> pair in searchList.Prices.ToList())
     {
@@ -434,10 +471,12 @@ while (true)
 
         searchList.NewSearches.Remove(search);
         await CheckCommands();
-        await Task.Delay(2000);
+        await Task.Delay(1000);
     }
 
     firstRound = false;
+    Console.WriteLine($"Round done in {timer.Elapsed.TotalSeconds:0} seconds ({searchList.Prices.Count} searches)");
+
 
 
     for (int i = 0; i < 15; i++)
