@@ -390,7 +390,7 @@ while (true)
                 }
 
 
-                string badWord = Filters.FindBadFault(ad.Title + ". " + ad.Description);
+                string badWord = Filters.FindBadFault(ad.Title + ". " + ad.Description, searchList.SkipWords[search]);
                 if (badWord != "")
                 {
                     Console.WriteLine($"Skipped ({badWord}): {ad.Title}");
@@ -411,7 +411,17 @@ while (true)
                 }
 
 
-                await telegram.SendListing(ad, Filters.IsNight());
+                string alert = "";
+                if (Filters.IsSuperDeal(ad, maxPrice))
+                {
+                    alert = "SUPER DEAL";
+                }
+                else if (searchList.UrgentSearches.Contains(search))
+                {
+                    alert = "URGENT";
+                }
+
+                await telegram.SendListing(ad, Filters.IsNight(), alert);
                 await Task.Delay(1000);
                 Console.WriteLine($"Sent: {ad.Title}");
                 Console.WriteLine();

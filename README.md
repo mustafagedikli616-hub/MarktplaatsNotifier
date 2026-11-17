@@ -14,15 +14,20 @@ I built this to catch cheap broken monitors, PCs and PC parts to repair and rese
 
 ## Features
 
-- Checks multiple searches every ~minute, each with its **own max price**
+- Checks multiple searches every ~minute, each with its **own max price**, newest listings first
 - Only sends **new** listings — seen listing IDs are saved to a file, so nothing is sent twice, even after a restart
-- Filters out listings that don't offer shipping
+- Telegram messages with the listing **photo**, bold title, price, city, distance, date and a link
 - Shows "Bieden", "Gratis" or "Zie omschrijving" instead of a fake €0 price
-- Telegram messages with the listing **photo**, bold title, price, city and a link
-- Crash protection: a network hiccup or an odd listing is logged and skipped instead of stopping the bot
 - Optional **category per search**, so "pc defect" doesn't send you car parts
-- Skips "Gezocht" (wanted) ads and repair-service ads
-- Quiet first run, so you don't get flooded with hundreds of old listings
+- Optional **skip words per search**: skip listings that mention e.g. `barst` or `waterschade`. Pieces of text with "geen" or "zonder" are ignored, so "geen waterschade" is not skipped
+- 🚨 **Super deal alerts**: a fixed price at or below half of the search's max price gets a loud 🚨 SUPER DEAL 🚨 message
+- 🚨 **Urgent searches**: mark a search as `urgent` and every new listing from it gets a loud 🚨 URGENT 🚨 message
+- **Quiet nights**: between 23:00 and 07:00 normal listings arrive silently, super deals and urgent searches still make a sound
+- **Shipping or nearby**: listings must offer shipping, or be pickup-only within a few km of your postcode
+- **Telegram commands** to manage your searches from your phone: `/add` (with category buttons), `/remove`, `/list`, `/cancel`, `/help`
+- Skips "Gezocht" (wanted), "Inkoop" (buying) and repair-service ads
+- Quiet first round after every start, so you don't get flooded with hundreds of old listings
+- Crash protection: a network hiccup or an odd listing is logged and skipped instead of stopping the bot
 - Friendly error messages: a typo in `searches.txt` or a wrong token is explained instead of crashing
 
 ## Built with
@@ -36,8 +41,9 @@ I built this to catch cheap broken monitors, PCs and PC parts to repair and rese
 
 1. Fetches search results as JSON from Marktplaats' search endpoint (`/lrp/api/search`)
 2. Parses each listing with `System.Text.Json`
-3. Skips listings it has already seen, that are too expensive or that are pickup-only
-4. Sends the rest to Telegram with the Bot API (`sendPhoto` / `sendMessage`, HTML formatting)
+3. Skips listings it has already seen, wanted/repair ads, listings with one of the search's skip words, listings above the max price, and pickup-only listings that are too far away
+4. Decides if a listing is a super deal or comes from an urgent search
+5. Sends the rest to Telegram with the Bot API (`sendPhoto` / `sendMessage`, HTML formatting), silently at night unless it's urgent
 
 ## Setup
 
@@ -53,24 +59,48 @@ On the first launch, the app asks for your Telegram bot token and finds your cha
 
 ## Changing the searches
 
-Edit `searches.txt`. Each line is a search term, a `;`, its max price in euros and optionally a `;` with a Marktplaats category ID:
+Edit `searches.txt`, or use `/add` and `/remove` in Telegram. Each line is one search, with up to 5 fields separated by `;`:
 
 ```
-defect monitor;60;322
+search words;max price;category;skip words;urgent
+```
+
+| Field | Required | Example | Meaning |
+|---|---|---|---|
+| search words | ✅ | `defect monitor` | What you type in the Marktplaats search bar |
+| max price | ✅ | `60` | Max price in whole euros |
+| category | optional | `322` | Only search this Marktplaats category |
+| skip words | optional | `barst,strepen` | Comma separated. Listings that mention one of these are skipped |
+| urgent | optional | `urgent` | Every new listing from this search gets a loud 🚨 URGENT 🚨 message |
+
+Examples:
+
+```
+defect monitor;60;322;barst,gebarsten,strepen,lijnen,waterschade
 rtx 3060;110;322
+galaxy a36 defect;90;820;;urgent
 iphone 13;250
 ```
 
-With a category, only that category is searched (`322` = Computers en Software). Without one, all of Marktplaats is searched. A list of common category IDs is at the top of `searches.txt`.
+To use a later field without an earlier one, leave the earlier one empty: `galaxy a36 defect;90;820;;urgent` has no skip words but is urgent.
 
-If a line has a mistake, the app tells you which line and what's wrong.
+Common category IDs: `322` = Computers en Software, `356` = Spelcomputers en Games, `31` = Audio, Tv en Foto, `820` = Telecommunicatie. The list is also at the top of `searches.txt`.
 
-Tip: after adding a new search, delete `seen.txt` so the first round is quiet again and you don't get all of that search's old listings.
+- Lines starting with `#` are switched off (comments). Put comments on their own line, never after a search.
+- If a line has a mistake, the app tells you which line and what's wrong.
+- The first round after every start is quiet, so new searches don't flood you with their old listings.
+
+**Super deals** need no setup: a listing with a fixed price (not "Bieden") at or below **half** of the search's max price is always a super deal. With `rtx 3070;140`, a 3070 for €70 or less is a super deal.
 
 ## Roadmap
 
-- [ ] Allow pickup-only listings near my own city
 - [x] Limit searches to specific Marktplaats categories
+- [x] Allow pickup-only listings near my own city
+- [x] Manage searches from Telegram
+- [x] Skip words per search
+- [x] Super deal and urgent alerts
+- [ ] Postcode and pickup distance as a setting (now set in `Program.cs`)
+- [ ] Skip words and urgent in the Telegram `/add` flow
 - [ ] Run 24/7 on a small server
 
 ## Note

@@ -2,9 +2,9 @@
 
 public static class Filters
 {
-    private static string[] skipWords = { "gebarsten", "barst", "strepen", "lijnen", "waterschade" };
+   
     
-    public static string FindBadFault(string text)
+    public static string FindBadFault(string text,string[] skipWords)
     {
         string[] pieces = text.ToLower().Split('.', ',', '!', '?', '\n');
 
@@ -30,6 +30,17 @@ public static class Filters
     {
         int hour = DateTime.Now.Hour;
         return hour >= 23 || hour < 7;
+    }
+    
+    public static bool IsSuperDeal(Listing ad, int maxPrice)
+    {
+        return true;
+        if (ad.PriceType != "FIXED")
+        {
+            return false;
+        }
+
+        return ad.Price > 0 && ad.Price <= maxPrice / 2.0;
     }
 
     public static bool IsNotForSale(string title)

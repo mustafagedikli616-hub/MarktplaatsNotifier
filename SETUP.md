@@ -63,21 +63,39 @@ The first round is quiet: the app remembers all current listings without sending
 
 ## Step 4: Choose what to search for
 
-Open **`searches.txt`** (in the same folder as the app) with Notepad. Every line is one search:
+There are two ways:
+
+**A) From your phone (easiest):** send `/add` to your bot. It asks what to search for, your max price, and a category (tap a button). Use `/list` to see your searches and `/remove rtx 3070` to remove one. Send `/help` for all commands.
+
+**B) In `searches.txt`:** open **`searches.txt`** (in the same folder as the app) with Notepad. Every line is one search:
 
 ```
-defect monitor;60;322
+defect monitor;60;322;barst,strepen,waterschade
 rtx 3060;110;322
+galaxy a36 defect;90;820;;urgent
 iphone 13;250
 ```
 
-That's the **search words**, a **`;`**, the **max price in euros**, and optionally another **`;`** with a **category number**. Add, change or remove lines, save, and restart the app.
+Each line has up to **5 parts**, separated by **`;`**. Only the first two are required:
 
-**Categories** keep your results clean: `322` means "only search in Computers en Software". Leave it out to search all of Marktplaats. The most common category numbers are listed at the top of `searches.txt`.
+1. **Search words**, like you'd type them on Marktplaats
+2. **Max price** in whole euros
+3. **Category number** (optional). `322` means "only search in Computers en Software". Leave it out to search all of Marktplaats. The most common numbers are at the top of `searches.txt`.
+4. **Skip words** (optional), separated by commas. A listing that mentions one of them is skipped. Example: `barst,waterschade` skips cracked or water-damaged items. "Geen waterschade" is *not* skipped.
+5. **`urgent`** (optional). Every new listing from this search makes a sound, even at night, with a 🚨 URGENT 🚨 header.
 
-Made a typo? The app tells you which line is wrong.
+Want part 5 but not part 4? Leave part 4 empty, so you get two `;` in a row: `galaxy a36 defect;90;820;;urgent`
 
-**Tip:** after adding new searches, delete `seen.txt` before restarting. Otherwise you'll get all the old listings of the new search at once.
+Save the file and restart the app. Made a typo? The app tells you which line is wrong.
+
+Lines starting with `#` are switched off. Put notes on their own `#` line, never behind a search.
+
+---
+
+## 🚨 Super deals and quiet nights
+
+- A listing with a **fixed price** (not "Bieden") that costs **half of your max price or less** is a super deal. You get a 🚨 SUPER DEAL 🚨 message that always makes a sound.
+- Between **23:00 and 07:00**, normal listings arrive **silently** so they don't wake you. Super deals and urgent searches still make a sound.
 
 ---
 
@@ -95,4 +113,5 @@ The app only checks while the black window is **open** and your computer is **aw
 | Nothing arrives | The first round is quiet. Wait a while, new listings don't appear every minute. |
 | I want to start over completely | Delete `secrets.txt` and `seen.txt`, then start the app. |
 | "Error with '...'" lines in the window | Usually a short internet hiccup. The app keeps going by itself. |
-| "Line ... in searches.txt is wrong" | Fix that line: `search words;price` or `search words;price;category`. Then start the app again. |
+| "Line ... in searches.txt is wrong" | Fix that line. The format is `search words;price;category;skip words;urgent`, and only the first two parts are required. Then start the app again. |
+| I'm not getting alerts at night | That's on purpose: normal listings are silent from 23:00 to 07:00. Add `urgent` to a search if you want those to make a sound. |

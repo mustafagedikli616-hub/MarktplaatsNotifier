@@ -26,7 +26,7 @@ public class Telegram
         await client.GetStringAsync(url);
     }
 
-    public async Task SendListing(Listing ad, bool night)
+    public async Task SendListing(Listing ad, bool night, string alert)
     {
         string place = ad.City;
         if (ad.DistanceKm >= 0)
@@ -43,9 +43,13 @@ public class Telegram
         string safeTitle = System.Net.WebUtility.HtmlEncode(ad.Title);
         string message =
             $"<b>{safeTitle}</b>\n💶 {ad.PriceText}\n📍 {place}\n📅 {ad.Date}\n\n🔗 <a href=\"https://www.marktplaats.nl{ad.Link}\">Bekijk advertentie</a>";
+        if (alert != "")
+        {
+            message = $"🚨 <b>{alert}</b> 🚨\n\n" + message;
+        }
         string encoded = Uri.EscapeDataString(message);
         string silent = "";
-        if (night)
+        if (night && alert == "")
         {
             silent = "&disable_notification=true";
         }

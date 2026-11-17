@@ -15,6 +15,7 @@ public class Listing
     public string Description { get; set; } = "";
     public string Photo { get; set; } = "";
 
+public string PriceType { get; set; } = "";
     public static Listing FromJson(JsonElement json)
     {
         Listing ad = new Listing(); // grab a blank form
@@ -31,6 +32,7 @@ public class Listing
         int priceCents = json.GetProperty("priceInfo").GetProperty("priceCents").GetInt32();
         ad.Price = priceCents / 100.0;
         string priceType = json.GetProperty("priceInfo").GetProperty("priceType").GetString();
+        ad.PriceType = priceType;
         ad.PriceText = $"€{ad.Price}";
         if (priceType == "FAST_BID")
         {

@@ -3,7 +3,11 @@ public class SearchList
 {
     public Dictionary<string, int> Prices { get; } = new Dictionary<string, int>();         
     public Dictionary<string, string> Categories { get; } = new Dictionary<string, string>(); 
-    public HashSet<string> NewSearches { get; } = new HashSet<string>();      
+    
+    public Dictionary<string, string[]> SkipWords { get; } = new Dictionary<string, string[]>();
+    public HashSet<string> NewSearches { get; } = new HashSet<string>(); 
+    
+    public HashSet<string> UrgentSearches { get; } = new HashSet<string>();
     
     
     public string Add(string line)
@@ -39,6 +43,7 @@ public class SearchList
 
         Prices.Add(searchText, limit);
         Categories.Add(searchText, category);
+        SkipWords.Add(searchText, new string[0]);
         NewSearches.Add(searchText);
 
         string newLine = $"{searchText};{limit}";
@@ -67,6 +72,8 @@ public class SearchList
 
         Prices.Remove(searchText);
         Categories.Remove(searchText);
+        SkipWords.Remove(searchText);
+        UrgentSearches.Remove(searchText);
 
         List<string> keptLines = new List<string>();
         foreach (string fileLine in File.ReadAllLines("searches.txt"))
@@ -141,15 +148,36 @@ public class SearchList
                 return 
                     $"Line {lineNumber} in searches.txt: \"{category}\" is not a valid category. Use a number like 322, or leave it out.";
             }
+            
+            string[] skipWords = new string[0];
+            if (parts.Length > 3)
+            {
+                skipWords = parts[3].ToLower().Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            }
 
             if (Prices.ContainsKey(searchText))
             {
                 return
                     $"Line {lineNumber} in searches.txt: \"{searchText}\" is in the file twice. Remove one of them.";
             }
+            string urgent = "";
+            if (parts.Length > 4)
+            {
+                urgent = parts[4].Trim().ToLower();
+            }
+
+            if (urgent != "" && urgent != "urgent")
+            {
+                return $"Line {lineNumber} in searches.txt: \"{urgent}\" is not valid. Use urgent, or leave it out.";
+            }
 
             Prices.Add(searchText, limit);
             Categories.Add(searchText, category);
+            SkipWords.Add(searchText, skipWords);
+            if (urgent == "urgent")
+            {
+                UrgentSearches.Add(searchText);
+            }
             
         }
 
