@@ -34,7 +34,6 @@ public static class Filters
     
     public static bool IsSuperDeal(Listing ad, int maxPrice)
     {
-        return true;
         if (ad.PriceType != "FIXED")
         {
             return false;
