@@ -293,7 +293,7 @@ async Task CheckCommands()
                 continue;
             }
 
-            // Only YOU can control the bot, messages from other people are ignored
+          
             string fromChat = msg.GetProperty("chat").GetProperty("id").GetInt64().ToString();
             if (fromChat != chatId)
             {
@@ -302,7 +302,7 @@ async Task CheckCommands()
 
             string text = textElement.GetString().Trim();
 
-            // Any command stops a half-finished /add
+          
             if (text.StartsWith("/"))
             {
                 addStep = "";
@@ -322,7 +322,7 @@ async Task CheckCommands()
                 string rest = text.Substring(4).Trim();
                 if (rest.Contains(";"))
                 {
-                    // Quick version: /add rtx 3070;140;322
+                    
                     await telegram.SendText(searchList.Add(rest));
                 }
                 else if (rest == "")
@@ -361,112 +361,208 @@ async Task CheckCommands()
 }
 
 bool firstRound = true;
-while (true)
+int errorsInARow = 0;
+bool IsNew(string itemId)
 {
-    System.Diagnostics.Stopwatch timer = System.Diagnostics.Stopwatch.StartNew();
-    Console.WriteLine("Checking...");
-    foreach (KeyValuePair<string, int> pair in searchList.Prices.ToList())
+    if (seenIds.Contains(itemId))
     {
-        string search = pair.Key;
-        int maxPrice = pair.Value;
+        return false;
+    }
 
+    seenIds.Add(itemId);
+    File.AppendAllText("seen.txt", itemId + "\n");
+    return true;
+}
+async Task<List<Listing>> FetchListings(string url)
+{
+    string json = await client.GetStringAsync(url);
+    if (errorsInARow >= 5)
+    {
+        try { await telegram.SendText("✅ Back to normal, searches work again."); } catch { }
+    }
+    errorsInARow = 0;
 
-        if (!searchList.Prices.ContainsKey(search))
+    List<Listing> ads = new List<Listing>();
+    using JsonDocument doc = JsonDocument.Parse(json);
+    foreach (JsonElement listing in doc.RootElement.GetProperty("listings").EnumerateArray())
+    {
+        string itemId = listing.GetProperty("itemId").GetString();
+        if (itemId.StartsWith("a"))
         {
             continue;
         }
 
+        try { ads.Add(Listing.FromJson(listing)); } catch { }
+    }
 
-        bool quiet = firstRound || searchList.NewSearches.Contains(search);
+    return ads;
+}
+async Task<bool> TrySend(Listing ad, string search)
+{
+    if (!searchList.Prices.ContainsKey(search))
+    {
+        return false;
+    }
+
+    int maxPrice = searchList.Prices[search];
+
+    if (Filters.IsNotForSale(ad.Title))
+    {
+        return false;
+    }
+
+    string badWord = Filters.FindBadFault(ad.Title + ". " + ad.Description, searchList.SkipWords[search]);
+    if (badWord != "")
+    {
+        Console.WriteLine($"Skipped ({badWord}): {ad.Title}");
+        return false;
+    }
+
+    if (ad.Price > maxPrice)
+    {
+        return false;
+    }
+
+    bool isNearby = ad.DistanceKm >= 0 && ad.DistanceKm <= pickupKm;
+    if (!ad.CanShip && !isNearby)
+    {
+        return false;
+    }
+
+    string alert = "";
+    if (Filters.IsSuperDeal(ad, maxPrice))
+    {
+        alert = "SUPER DEAL";
+    }
+    else if (searchList.UrgentSearches.Contains(search))
+    {
+        alert = "URGENT";
+    }
+
+    await telegram.SendListing(ad, Filters.IsNight(), alert);
+    await Task.Delay(1000);
+    Console.WriteLine($"Sent ({search}): {ad.Title}");
+    Console.WriteLine();
+    return true;
+}
+
+async Task HandleError(string what, Exception ex)
+{
+    {
+        Console.WriteLine($"Error with '{what}': {ex.Message}");
+        errorsInARow++;
+        if (errorsInARow == 5)
+        {
+            try { await telegram.SendText($"⚠️ 5 errors in a row. Marktplaats might be blocking me, or the internet is down.\nLast error: {ex.Message}"); } catch { }
+        }
+        if (ex is HttpRequestException httpError && httpError.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+        {
+            Console.WriteLine("Marktplaats says: too many requests. Pausing 2 minutes...");
+            for (int i = 0; i < 60; i++)
+            {
+                await CheckCommands();
+                await Task.Delay(2000);
+            }
+        }
+    }
+}
+HashSet<string> checkedCategories = new HashSet<string>();
+
+while (true)
+{
+    System.Diagnostics.Stopwatch timer = System.Diagnostics.Stopwatch.StartNew();
+    Console.WriteLine("Checking...");
+    
+    Dictionary<string, List<string>> searchesByCategory = new Dictionary<string, List<string>>();
+    List<string> searchesWithoutCategory = new List<string>();
+
+    foreach (string search in searchList.Prices.Keys)
+    {
+        string category = searchList.Categories[search];
+        if (category == "")
+        {
+            searchesWithoutCategory.Add(search);
+        }
+        else
+        {
+            if (!searchesByCategory.ContainsKey(category))
+            {
+                searchesByCategory[category] = new List<string>();
+            }
+            searchesByCategory[category].Add(search);
+        }
+    }
+
+  
+    foreach (KeyValuePair<string, List<string>> group in searchesByCategory)
+    {
+        string category = group.Key;
+        bool quiet = firstRound || !checkedCategories.Contains(category);
 
         try
         {
-            string url =
-                $"https://www.marktplaats.nl/lrp/api/search?query={Uri.EscapeDataString(search)}&limit=30&sortBy=SORT_INDEX&sortOrder=DECREASING&postcode={postcode}";
-            if (searchList.Categories[search] != "")
+            List<Listing> ads = await FetchListings(
+                $"https://www.marktplaats.nl/lrp/api/search?l1CategoryId={category}&limit=100&sortBy=SORT_INDEX&sortOrder=DECREASING&postcode={postcode}");
+            checkedCategories.Add(category);
+
+            foreach (Listing ad in ads)
             {
-                url += $"&l1CategoryId={searchList.Categories[search]}";
-            }
-
-            string json = await client.GetStringAsync(url);
-            using JsonDocument doc = JsonDocument.Parse(json);
-            JsonElement listings = doc.RootElement.GetProperty("listings");
-
-            foreach (JsonElement listing in listings.EnumerateArray())
-
-            {
-                string itemId = listing.GetProperty("itemId").GetString();
-
-
-                if (itemId.StartsWith("a"))
+                if (!IsNew(ad.Id))
                 {
                     continue;
                 }
 
-                if (seenIds.Contains(itemId))
-                {
-                    continue;
-                }
-                else
-                {
-                    seenIds.Add(itemId);
-                }
-
-                File.AppendAllText("seen.txt", itemId + "\n");
                 if (quiet)
                 {
                     continue;
                 }
 
-                Listing ad = Listing.FromJson(listing);
-
-
-                if (Filters.IsNotForSale(ad.Title))
+                foreach (string search in group.Value)
                 {
-                    continue;
+                    if (Filters.MatchesSearch(search, ad) && await TrySend(ad, search))
+                    {
+                        break;
+                    }
                 }
-
-
-                string badWord = Filters.FindBadFault(ad.Title + ". " + ad.Description, searchList.SkipWords[search]);
-                if (badWord != "")
-                {
-                    Console.WriteLine($"Skipped ({badWord}): {ad.Title}");
-                    continue;
-                }
-
-
-                if (ad.Price > maxPrice)
-                {
-                    continue;
-                }
-
-
-                bool isNearby = ad.DistanceKm >= 0 && ad.DistanceKm <= pickupKm;
-                if (!ad.CanShip && !isNearby)
-                {
-                    continue;
-                }
-
-
-                string alert = "";
-                if (Filters.IsSuperDeal(ad, maxPrice))
-                {
-                    alert = "SUPER DEAL";
-                }
-                else if (searchList.UrgentSearches.Contains(search))
-                {
-                    alert = "URGENT";
-                }
-
-                await telegram.SendListing(ad, Filters.IsNight(), alert);
-                await Task.Delay(1000);
-                Console.WriteLine($"Sent: {ad.Title}");
-                Console.WriteLine();
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error with '{search}': {ex.Message}");
+            await HandleError($"category {category}", ex);
+        }
+
+        await CheckCommands();
+        await Task.Delay(1000);
+    }
+
+
+    foreach (string search in searchesWithoutCategory)
+    {
+        bool quiet = firstRound || searchList.NewSearches.Contains(search);
+
+        try
+        {
+            List<Listing> ads = await FetchListings(
+                $"https://www.marktplaats.nl/lrp/api/search?query={Uri.EscapeDataString(search)}&limit=30&sortBy=SORT_INDEX&sortOrder=DECREASING&postcode={postcode}");
+
+            foreach (Listing ad in ads)
+            {
+                if (!IsNew(ad.Id))
+                {
+                    continue;
+                }
+
+                if (quiet)
+                {
+                    continue;
+                }
+
+                await TrySend(ad, search);
+            }
+        }
+        catch (Exception ex)
+        {
+            await HandleError(search, ex);
         }
 
         searchList.NewSearches.Remove(search);
@@ -475,9 +571,7 @@ while (true)
     }
 
     firstRound = false;
-    Console.WriteLine($"Round done in {timer.Elapsed.TotalSeconds:0} seconds ({searchList.Prices.Count} searches)");
-
-
+    Console.WriteLine($"Round done in {timer.Elapsed.TotalSeconds:0} seconds ({searchList.Prices.Count} searches, {searchesByCategory.Count} categories)");
 
     for (int i = 0; i < 15; i++)
     {

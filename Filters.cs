@@ -51,5 +51,22 @@ public static class Filters
         }
 
         return false;
+
+
+    }
+    public static bool MatchesSearch(string searchText, Listing ad)
+    {
+        string text = (ad.Title + " " + ad.Description).ToLower();
+        string[] words = searchText.ToLower().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+        foreach (string word in words)
+        {
+            if (!text.Contains(word))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 }
