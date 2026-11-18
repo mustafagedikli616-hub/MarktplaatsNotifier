@@ -114,7 +114,8 @@ The app only checks while the black window is **open** and your computer is **aw
 | Problem | Fix |
 |---|---|
 | "That token doesn't work" | Copy the token from BotFather again, without spaces, and paste it. |
-| Nothing arrives | The first round is quiet, and one round takes a few minutes. Wait a while, new listings don't appear every minute. |
+| Nothing arrives | The first round is quiet. Wait a while, new listings don't appear every minute. |
+| "⚠️ 5 errors in a row" in Telegram | Marktplaats is blocking the bot for a moment, or your internet is down. The bot keeps trying by itself and sends ✅ when it works again. |
 | I moved, or want a different pickup distance | Open `secrets.txt` with Notepad. Line 3 is your postcode, line 4 the distance in km. Change them, save, and restart the app. |
 | I want to start over completely | Delete `secrets.txt` and `seen.txt`, then start the app. |
 | "Error with '...'" lines in the window | Usually a short internet hiccup. The app keeps going by itself. |

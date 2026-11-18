@@ -54,19 +54,38 @@ public static class Filters
 
 
     }
+    private static char[] separators = { ' ', '.', ',', '!', '?', '\n', '\r', '(', ')', '/', '-', ':', ';', '"', '\'', '+', '&' };
+
     public static bool MatchesSearch(string searchText, Listing ad)
     {
-        string text = (ad.Title + " " + ad.Description).ToLower();
-        string[] words = searchText.ToLower().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        string[] textWords = (ad.Title + " " + ad.Description).ToLower().Split(separators, StringSplitOptions.RemoveEmptyEntries);
+        string[] searchWords = searchText.ToLower().Split(separators, StringSplitOptions.RemoveEmptyEntries);
+        string squashedText = string.Concat(textWords);
 
-        foreach (string word in words)
+        foreach (string searchWord in searchWords)
         {
-            if (!text.Contains(word))
+            bool found = false;
+            foreach (string textWord in textWords)
+            {
+                if (textWord.StartsWith(searchWord) || (textWord.Any(char.IsDigit) && textWord.Contains(searchWord)))
+                {
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found)
             {
                 return false;
             }
+            if (!found && searchWord.Any(char.IsDigit) && squashedText.Contains(searchWord))
+            {
+                found = true;
+            }
         }
+        
 
         return true;
     }
+    
 }

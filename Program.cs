@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
 {
@@ -397,6 +398,52 @@ async Task<List<Listing>> FetchListings(string url)
 
     return ads;
 }
+
+string FindInText(string text, string pattern)
+{
+    Match match = Regex.Match(text, pattern);
+    if (match.Success)
+    {
+        return match.Groups[1].Value;
+    }
+
+    return "";
+}
+
+async Task AddPageDetails(Listing ad)
+{
+    try
+    {
+        string html = await client.GetStringAsync("https://www.marktplaats.nl" + ad.Link);
+
+        string stats = FindInText(html, """stats":\{([^}]*)\}""");
+        string views = FindInText(stats, """viewCount":(\d+)""");
+        string saves = FindInText(stats, """favoritedCount":(\d+)""");
+        string since = FindInText(stats, """since":"([^"]+)""");
+        string years = FindInText(html, """activeYears":(\d+)""");
+        string bids = FindInText(html, """bidsInfo":\{.*?"bids":\[(.*?)\]""");
+        ad.SellerType = FindInText(html, """sellerType":"([A-Z_]+)""");
+
+        if (views != "") { ad.Views = int.Parse(views); }
+        if (saves != "") { ad.Saves = int.Parse(saves); }
+        if (since != "") { ad.PostedAt = DateTime.Parse(since); }
+        if (years != "") { ad.SellerYears = int.Parse(years); }
+
+        foreach (Match bid in Regex.Matches(bids, """value":(\d+)"""))
+        {
+            ad.BidCount++;
+            double amount = int.Parse(bid.Groups[1].Value) / 100.0;
+            if (amount > ad.HighestBid)
+            {
+                ad.HighestBid = amount;
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Couldn't get extra info for '{ad.Title}': {ex.Message}");
+    }
+}
 async Task<bool> TrySend(Listing ad, string search)
 {
     if (!searchList.Prices.ContainsKey(search))
@@ -438,7 +485,8 @@ async Task<bool> TrySend(Listing ad, string search)
     {
         alert = "URGENT";
     }
-
+    ad.MatchedSearch = search;
+    await AddPageDetails(ad);
     await telegram.SendListing(ad, Filters.IsNight(), alert);
     await Task.Delay(1000);
     Console.WriteLine($"Sent ({search}): {ad.Title}");
@@ -501,30 +549,47 @@ while (true)
 
         try
         {
-            List<Listing> ads = await FetchListings(
-                $"https://www.marktplaats.nl/lrp/api/search?l1CategoryId={category}&limit=100&sortBy=SORT_INDEX&sortOrder=DECREASING&postcode={postcode}");
-            checkedCategories.Add(category);
-
-            foreach (Listing ad in ads)
+            for (int page = 0; page < 5; page++)
             {
-                if (!IsNew(ad.Id))
-                {
-                    continue;
-                }
+                List<Listing> ads = await FetchListings(
+                    $"https://www.marktplaats.nl/lrp/api/search?l1CategoryId={category}&limit=100&offset={page * 100}&sortBy=SORT_INDEX&sortOrder=DECREASING&postcode={postcode}");
 
-                if (quiet)
+                bool caughtUp = false;
+                foreach (Listing ad in ads)
                 {
-                    continue;
-                }
-
-                foreach (string search in group.Value)
-                {
-                    if (Filters.MatchesSearch(search, ad) && await TrySend(ad, search))
+                    if (!ad.IsBumped && seenIds.Contains(ad.Id))
                     {
-                        break;
+                        caughtUp = true;
+                    }
+
+                    if (!IsNew(ad.Id))
+                    {
+                        continue;
+                    }
+
+                    if (quiet)
+                    {
+                        continue;
+                    }
+
+                    foreach (string search in group.Value)
+                    {
+                        if (Filters.MatchesSearch(search, ad) && await TrySend(ad, search))
+                        {
+                            break;
+                        }
                     }
                 }
+
+                if (caughtUp || ads.Count == 0)
+                {
+                    break;
+                }
+
+                await Task.Delay(1000);
             }
+
+            checkedCategories.Add(category);
         }
         catch (Exception ex)
         {

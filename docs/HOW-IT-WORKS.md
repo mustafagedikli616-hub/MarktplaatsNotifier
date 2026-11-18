@@ -8,26 +8,31 @@ Method names are used instead of line numbers, because line numbers change all t
 ## The big picture: the journey of one listing
 
 ```
-Marktplaats ──▶ Program.cs asks for the newest listings of one search
-                     │
-                     ▼
-              Listing.FromJson()   fills in a "form" with title, price, city...
-                     │
-                     ▼
-              Seen before? ──yes──▶ skip  (seen.txt)
-                     │ no
-                     ▼
-              First round / new search? ──yes──▶ remember it, but don't send
-                     │ no
-                     ▼
-              Filters: wanted ad? skip word? too expensive? too far for pickup?
-                     │ all fine
-                     ▼
-              Super deal? Urgent search? ──▶ alert = "SUPER DEAL" / "URGENT" / ""
-                     │
-                     ▼
-              Telegram.SendListing()  ──▶ 📱 your phone
+Every round:
+  Sort the searches into "drawers" per category   (searchesByCategory)
+        │
+        ▼
+  Per category: FetchListings()  ──▶  the 100 newest listings, as Listing forms
+        │
+        ▼
+  IsNew()?  ──no──▶ skip            (already in seen.txt)
+        │ yes (and now remembered)
+        ▼
+  Quiet? (first round, or a category checked for the first time) ──yes──▶ skip
+        │ no
+        ▼
+  For each search in this category:
+     Filters.MatchesSearch()?  all search words in the title/description?
+        │ yes
+        ▼
+     TrySend(): wanted ad? skip word? too expensive? too far for pickup?
+        │ all fine
+        ▼
+     alert = "SUPER DEAL" / "URGENT" / ""  ──▶  Telegram.SendListing()  ──▶ 📱
+     (sent → stop, so a listing is never sent twice)
 ```
+
+Searches **without** a category (all of Marktplaats) still get their own request with the search words, and then go through the same `IsNew` → quiet → `TrySend` steps.
 
 ---
 
@@ -59,17 +64,39 @@ Marktplaats ──▶ Program.cs asks for the newest listings of one search
 7. **Read `seen.txt`** into the `seenIds` HashSet.
 8. **Telegram setup**: the category buttons for `/add`, the `/` command menu (`setMyCommands`), and the "Bot started" message.
 9. **The `/add` conversation**: `StartAdd`, `HandleAddStep` and `CheckCommands` (see below).
-10. **The main loop** (`while (true)`), forever:
+10. **Helper methods** used by the main loop (see the table below).
+11. **The main loop** (`while (true)`), forever:
     - Start a `Stopwatch`.
-    - For **every search**: ask Marktplaats, go through the listings, send the good ones, then `CheckCommands()` and wait 1 second.
-    - Print `Round done in ... seconds`.
-    - Rest for 15 × 2 seconds, checking commands in between, then start again.
+    - **Sort** the searches: per category into `searchesByCategory` (a cupboard with one drawer per category), the rest into `searchesWithoutCategory`.
+    - **Per category:** one request for the 100 newest listings, then match every new listing against the searches in that drawer.
+    - **Per search without a category:** one request with the search words, the old way.
+    - After every request: `CheckCommands()` and wait 1 second.
+    - Print `Round done in ... seconds`, rest 15 × 2 seconds, then start again.
 
-### Why 1 second between searches?
-Marktplaats blocks you (error **429** "too many requests") if you ask too often. `CheckCommands()` already takes about 1 second and talks to Telegram, not Marktplaats, so with `Task.Delay(1000)` there are about 2 seconds between two Marktplaats requests. A round takes about **3 seconds per search**.
+### The helper methods in Program.cs
+
+| Method | What it does | Gives back |
+|---|---|---|
+| `IsNew(itemId)` | Seen before? If not, remembers it right away (`seenIds` + `seen.txt`). | `true` if new |
+| `FetchListings(url)` | Asks Marktplaats, turns every listing into a `Listing` form. Skips ads (`a...` IDs) and listings that can't be read. Resets `errorsInARow` and sends ✅ if it was broken before. | `List<Listing>` |
+| `TrySend(ad, search)` | All filters for one listing + one search: search still exists? not-for-sale? skip word? price? distance? Then picks the alert and sends it. | `true` if sent |
+| `HandleError(what, ex)` | Logs the error, counts `errorsInARow`, sends ⚠️ at exactly 5, pauses 2 minutes on a 429. | nothing |
+
+`async Task<bool>` means "a method that waits for the internet, **then gives back** a bool". `async Task` (without `<...>`) gives nothing back.
+
+### Why one request per category?
+Marktplaats blocks you (error **429** "too many requests") if you ask too often. Asking "what's new in Computers?" once instead of "anything new for X?" 73 times is **faster and safer**: a round takes about 10 seconds instead of 6 minutes.
+
+The catch: the bot decides itself if a listing matches a search (`MatchesSearch`), and it only sees the title and the **start** of the description (search results only include the first part of it). See `MatchesSearch` below for the exact rules.
 
 ### Why is the first round quiet?
-After every start, all current listings are added to `seen.txt` without sending them. Otherwise you'd get hundreds of old listings at once. A search added with `/add` is also quiet for its first check (`NewSearches`).
+After every start, all current listings are added to `seen.txt` without sending them. Otherwise you'd get hundreds of old listings at once. The same goes for a **category checked for the first time** (`checkedCategories`), for example after you `/add` a search in a new category, and for a new search without a category (`NewSearches`).
+
+### Errors and 429
+- `errorsInARow` counts failed requests in a row. At **exactly** 5 (`==`, not `>=`, so you get one warning instead of spam) you get a ⚠️ in Telegram.
+- The first request that works again resets it to 0 and sends ✅.
+- A **429** ("too many requests") pauses 2 minutes, with `CheckCommands()` in between, so Telegram commands keep working.
+- `try { SendText(...) } catch { }` around warnings: if the internet is down, Telegram fails too, and an error inside a `catch` isn't caught by that same `catch`.
 
 ---
 
@@ -156,6 +183,7 @@ A **`static class`**: a toolbox, not an object. You never write `new Filters()`,
 | `IsNight()` | Is it between 23:00 and 07:00? | `hour >= 23 \|\| hour < 7` |
 | `IsSuperDeal(ad, maxPrice)` | Fixed price of half the max price or less? | Only `FIXED` prices count. `maxPrice / 2.0` instead of `/ 2`, so 75 / 2.0 = 37.5 and not 37. |
 | `IsNotForSale(title)` | Is it a wanted/buying/repair ad? | Title contains "gezocht", "reparatie" or "inkoop". |
+| `MatchesSearch(searchText, ad)` | Does this listing match this search? | A checklist: **every** search word must be found, one missing → `false`. Text is cut into words at spaces and punctuation (`separators`). A search word must be the **start** of a listing word (`monitor` → "monitoren" ✅, `ram` → "frame" ❌). Words with numbers may be **anywhere** inside a word (`3060` → "rtx3060" ✅), and are also checked against the text with all spaces removed (`squashedText`), so `rtx3060` finds "RTX 3060". |
 
 ---
 
@@ -194,6 +222,14 @@ How `SendListing` decides:
 | `int.TryParse(text, out int x)` | Try to turn text into a number, without crashing if it isn't one. |
 | `out _` | "I don't need the result, I only want to know if it worked." |
 | `Stopwatch` | A real stopwatch: `StartNew()`, then `Elapsed`. |
+| `Dictionary<string, List<string>>` | A cupboard with one drawer per key, each drawer holds a list. Make the drawer first if it doesn't exist yet. |
+| `a && b` | `b` only runs if `a` is `true`. Used so `TrySend` only runs when `MatchesSearch` matched. |
+| loop inside a loop + `bool found` | For every search word, go through all listing words. `found` remembers if one matched, `break` stops searching once it did. |
+| `word.Any(char.IsDigit)` | "Does any character in this word count as a digit?" Recognises model numbers. |
+| `string.Concat(words)` | Glue all words together with nothing in between. |
+| `break` | Stop the whole loop (not just this round, that's `continue`). |
+| enum (`HttpStatusCode.TooManyRequests`) | Names for numbers, like contacts in your phone. `TooManyRequests` = 429. |
+| `ex is HttpRequestException httpError` | "Is this error an internet-request error? Then call it `httpError` so I can read its `StatusCode`." |
 | `$"...{x}..."` | Put a variable inside a string. |
 
 ---
@@ -206,7 +242,11 @@ How `SendListing` decides:
 | When something is a super deal | `Filters.IsSuperDeal()` |
 | Which ads count as "not for sale" | `Filters.IsNotForSale()` |
 | What a Telegram message looks like | `Telegram.SendListing()` |
-| Time between searches | `Task.Delay(1000)` inside the `foreach` in the main loop |
+| Time between requests | `Task.Delay(1000)` inside both `foreach` loops in the main loop |
+| How many listings per category | `limit=100` in the category URL in the main loop |
+| How words are matched | `Filters.MatchesSearch()` |
+| When you get the error warning | `HandleError()` (`errorsInARow == 5`) |
+| How long the 429 pause is | `HandleError()` (the `for` loop, 60 × 2 s) |
 | Rest time after a round | the `for (int i = 0; i < 15; i++)` loop at the end of `Program.cs` |
 | The category buttons for `/add` | `categoryButtons` in `Program.cs` |
 | Add a new Telegram command | `CheckCommands()`, plus `helpText` and the `commands` list for the `/` menu |
@@ -223,3 +263,6 @@ How `SendListing` decides:
 - Run with `dotnet run` from the project folder, **not** Rider's ▶ button. ▶ runs from `bin/Debug`, where `searches.txt` and `secrets.txt` don't exist.
 - Never put a comment after a search in `searches.txt`, only on its own `#` line.
 - When changing a method's parameters, the old ones don't disappear by themselves: remove what you don't use anymore.
+- `==` vs `>=` for warnings: `==` fires once, `>=` fires every time after.
+- When code is needed in two places, put it in a helper method instead of copying it.
+- `Contains` also finds words *inside* other words (`ram` in "frame"). For matching search words, check the start of a word instead.

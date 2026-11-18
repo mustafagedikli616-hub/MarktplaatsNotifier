@@ -33,20 +33,58 @@ public class Telegram
         {
             place += $" ({ad.DistanceKm} km)";
         }
-
-        if (!ad.CanShip)
-        {
-            place += " · alleen ophalen";
-        }
+        
 
 
         string safeTitle = System.Net.WebUtility.HtmlEncode(ad.Title);
-        string message =
-            $"<b>{safeTitle}</b>\n💶 {ad.PriceText}\n📍 {place}\n📅 {ad.Date}\n\n🔗 <a href=\"https://www.marktplaats.nl{ad.Link}\">Bekijk advertentie</a>";
+        string message = $"<b>{safeTitle}</b>\n";
+
+        message += $"💶 {ad.PriceText}";
+        if (ad.Condition != "") { message += $" · 🏷️ {ad.Condition}"; }
+        message += "\n";
+
+        message += $"📍 {place}";
+        if (ad.Delivery != "") { message += $" · 📦 {ad.Delivery}"; }
+        message += "\n";
+
+        if (ad.PostedAt != DateTime.MinValue)
+        {
+            int minutes = (int)(DateTime.Now - ad.PostedAt).TotalMinutes;
+            if (minutes < 60) { message += $"🕒 online {minutes} min"; }
+            else { message += $"🕒 online {minutes / 60} h"; }
+        }
+        else
+        {
+            message += $"📅 {ad.Date}";
+        }
+        if (ad.Views >= 0) { message += $" · 👀 {ad.Views} · ❤️ {ad.Saves}"; }
+        message += "\n";
+
+        if (ad.BidCount > 0) { message += $"💰 {ad.BidCount} bids, highest €{ad.HighestBid}\n"; }
+
+        message += $"👤 {System.Net.WebUtility.HtmlEncode(ad.SellerName)}";
+        if (ad.SellerVerified) { message += " ✓"; }
+        if (ad.SellerYears >= 0) { message += $" · {ad.SellerYears} yr on Marktplaats"; }
+        if (ad.SellerType == "CONSUMER") { message += " · private"; }
+        else if (ad.SellerType != "") { message += " · business"; }
+        message += $" · 📸 {ad.PhotoCount}\n";
+
+        if (ad.Description != "")
+        {
+            string snippet = ad.Description;
+            if (snippet.Length > 150) { snippet = snippet.Substring(0, 150) + "..."; }
+            message += $"📝 <i>{System.Net.WebUtility.HtmlEncode(snippet)}</i>\n";
+        }
+
+        message += $"🔍 via: {System.Net.WebUtility.HtmlEncode(ad.MatchedSearch)}\n";
+        if (ad.IsBumped) { message += "🔁 Dagtopper (paid to the top, may be an old listing)\n"; }
+
+        message += $"\n🔗 <a href=\"https://www.marktplaats.nl{ad.Link}\">Bekijk advertentie</a>";
         if (alert != "")
         {
             message = $"🚨 <b>{alert}</b> 🚨\n\n" + message;
         }
+        
         string encoded = Uri.EscapeDataString(message);
         string silent = "";
         if (night && alert == "")

@@ -4,7 +4,7 @@
 ![.NET](https://img.shields.io/badge/.NET-512BD4?logo=dotnet&logoColor=white)
 ![Telegram](https://img.shields.io/badge/Telegram_Bot-26A5E4?logo=telegram&logoColor=white)
 
-A C# console app that watches [Marktplaats.nl](https://www.marktplaats.nl) searches and sends new listings straight to your phone via Telegram, usually within a few minutes of being posted. Much faster than Marktplaats' own saved searches.
+A C# console app that watches [Marktplaats.nl](https://www.marktplaats.nl) searches and sends new listings straight to your phone via Telegram, usually within about a minute of being posted. Much faster than Marktplaats' own saved searches.
 
 I built this to catch cheap broken monitors, PCs and PC parts to repair and resell, before anyone else sees them.
 
@@ -14,7 +14,8 @@ I built this to catch cheap broken monitors, PCs and PC parts to repair and rese
 
 ## Features
 
-- Checks all your searches in rounds, each with its **own max price**, newest listings first (a round takes about 3 seconds per search)
+- **Fast**: one request per category instead of one per search, so a full round takes about 10 seconds and new listings arrive within about a minute
+- Each search has its **own max price**
 - Only sends **new** listings — seen listing IDs are saved to a file, so nothing is sent twice, even after a restart
 - Telegram messages with the listing **photo**, bold title, price, city, distance, date and a link
 - Shows "Bieden", "Gratis" or "Zie omschrijving" instead of a fake €0 price
@@ -28,6 +29,8 @@ I built this to catch cheap broken monitors, PCs and PC parts to repair and rese
 - Skips "Gezocht" (wanted), "Inkoop" (buying) and repair-service ads
 - Quiet first round after every start, so you don't get flooded with hundreds of old listings
 - Crash protection: a network hiccup or an odd listing is logged and skipped instead of stopping the bot
+- **Error warnings**: after 5 failed requests in a row you get a ⚠️ message in Telegram, and a ✅ when it works again
+- **Slows down by itself**: if Marktplaats answers 429 "too many requests", the bot pauses 2 minutes
 - Friendly error messages: a typo in `searches.txt` or a wrong token is explained instead of crashing
 
 ## Built with
@@ -39,11 +42,12 @@ I built this to catch cheap broken monitors, PCs and PC parts to repair and rese
 
 ## How it works
 
-1. Fetches search results as JSON from Marktplaats' search endpoint (`/lrp/api/search`)
-2. Parses each listing with `System.Text.Json`
-3. Skips listings it has already seen, wanted/repair ads, listings with one of the search's skip words, listings above the max price, and pickup-only listings that are too far away
-4. Decides if a listing is a super deal or comes from an urgent search
-5. Sends the rest to Telegram with the Bot API (`sendPhoto` / `sendMessage`, HTML formatting), silently at night unless it's urgent
+1. Groups your searches by category
+2. Per category, fetches the 100 newest listings from Marktplaats' search endpoint (`/lrp/api/search`) in **one** request. Searches without a category get their own request, like a normal Marktplaats search
+3. Skips listings it has already seen
+4. Checks every new listing against the searches of that category: all search words must appear in the title or description
+5. Applies the search's filters: wanted/repair ads, skip words, max price, pickup distance
+6. Decides if it's a super deal or comes from an urgent search, and sends it to Telegram (`sendPhoto` / `sendMessage`, HTML formatting), silently at night unless it's urgent
 
 📖 Want to know what every file and method does? See [**How it works (code guide)**](docs/HOW-IT-WORKS.md).
 
@@ -91,22 +95,55 @@ Common category IDs: `322` = Computers en Software, `356` = Spelcomputers en Gam
 - Lines starting with `#` are switched off (comments). Put comments on their own line, never after a search.
 - If a line has a mistake, the app tells you which line and what's wrong.
 - The first round after every start is quiet, so new searches don't flood you with their old listings.
+- Searches **with** a category are matched by the bot itself: every search word must be the **start of a word** in the title or the start of the description (`monitor` matches "monitoren", but `ram` doesn't match "frame"). Words with numbers are matched more loosely, so `rtx 3060`, `rtx3060` and "RTX 3060" all find each other. Searches **without** a category use Marktplaats' own search.
 
 **Super deals** need no setup: a listing with a fixed price (not "Bieden") at or below **half** of the search's max price is always a super deal. With `rtx 3070;140`, a 3070 for €70 or less is a super deal.
 
 ## Roadmap
 
+### ✅ Done
 - [x] Limit searches to specific Marktplaats categories
 - [x] Allow pickup-only listings near my own city
-- [x] Manage searches from Telegram
+- [x] Manage searches from Telegram (`/add`, `/remove`, `/list`)
 - [x] Skip words per search
-- [x] Super deal and urgent alerts
+- [x] Super deal and urgent alerts, quiet nights
 - [x] Postcode and pickup distance asked at the first launch
-- [ ] Skip words and urgent in the Telegram `/add` flow
-- [ ] Telegram warning after several errors in a row, and slowing down on a 429 "too many requests"
-- [ ] One request per category instead of one per search, so a round takes seconds instead of minutes
+
+### 1. Reliability: never go quiet without telling you
+- [x] Telegram warning after several errors in a row
+- [x] Handle 429 "too many requests": wait automatically, then continue
+
+### 2. Speed: a round every minute
+- [x] One request per category instead of one per search (3 requests per round instead of 73), matching listings to searches in the bot itself
+- [ ] Run the category requests at the same time (`Task.WhenAll`)
+- [x] Smarter matching: whole-word starts, model numbers with or without spaces
+
+### 3. Everything from your phone
+- [ ] `/add` also asks for skip words and urgent
+- [ ] Buttons in `/list` (🗑️ remove, ✏️ edit)
+- [ ] `/pause` and `/resume`
+- [ ] Settings via Telegram (night hours, pickup distance)
+- [ ] A "Bekijk" button under every listing
+
+### 4. For everyone
 - [ ] Multi-user: one bot for friends, each with their own searches
-- [ ] Run 24/7 on a small server
+- [ ] Run 24/7 on a cheap mini PC or a free cloud server
+- [ ] Ship a short example `searches.txt` instead of my own list
+- [ ] Mac and Linux release builds
+
+### 5. Features nobody else has
+- [ ] Seller info in the message (years on Marktplaats, reviews, verified ✓)
+- [ ] Price drop alerts ("📉 €80 → €45")
+- [ ] Repair hints: `hints.txt` with rules like `geen beeld,geluid;💡 often backlight`, plus a question to ask the seller
+- [ ] Separate Telegram group with a loud custom sound for super deals
+
+### 6. Big future plan: AI deal assistant
+- [ ] Claude reads the title, description and photos of listings that pass the filters
+- [ ] Verdict in the message: good deal or skip, likely fault, resale value, max bid
+- [ ] A ready-to-copy message to the seller (Dutch)
+- [ ] Forward a seller's reply to the bot and get a suggested answer
+- [ ] Daily limit on AI calls to keep costs low
+- Messages are never sent to sellers automatically: Marktplaats doesn't allow bots to message, and it would put the account at risk. The bot drafts, you send.
 
 ## Note
 

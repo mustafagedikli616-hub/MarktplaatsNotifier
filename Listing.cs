@@ -15,7 +15,36 @@ public class Listing
     public string Description { get; set; } = "";
     public string Photo { get; set; } = "";
 
-public string PriceType { get; set; } = "";
+    public bool IsBumped { get; set; } = false;
+
+    public string Condition { get; set; } = "";
+    
+    public string Delivery { get; set; } = "";
+    
+    public string SellerName { get; set; } = "";
+    
+    public bool SellerVerified { get; set; } = false;
+    
+    public int PhotoCount { get; set; } = 0;
+    
+    public string MatchedSearch { get; set; } = "";
+    
+    public string PriceType { get; set; } = "";
+    
+    public int Views { get; set; } = -1;
+    
+    public int Saves { get; set; } = -1;
+    
+    public DateTime PostedAt { get; set; } = DateTime.MinValue;
+    
+    public int BidCount { get; set; } = 0;
+    
+    public double HighestBid { get; set; } = 0;
+    
+    public int SellerYears { get; set; } = -1;
+    
+    public string SellerType { get; set; } = "";
+
     public static Listing FromJson(JsonElement json)
     {
         Listing ad = new Listing(); // grab a blank form
@@ -28,6 +57,11 @@ public string PriceType { get; set; } = "";
             ad.Description = descriptionElement.GetString() ?? "";
         }
 
+        if (json.TryGetProperty("priorityProduct", out JsonElement priorityElement))
+        {
+            ad.IsBumped = priorityElement.GetString() != "NONE";
+        }
+
 
         int priceCents = json.GetProperty("priceInfo").GetProperty("priceCents").GetInt32();
         ad.Price = priceCents / 100.0;
@@ -36,7 +70,7 @@ public string PriceType { get; set; } = "";
         ad.PriceText = $"€{ad.Price}";
         if (priceType == "FAST_BID")
         {
-            ad.PriceText= "Bieden";
+            ad.PriceText = "Bieden";
         }
         else if (priceType == "MIN_BID" && ad.Price == 0)
         {
@@ -67,9 +101,20 @@ public string PriceType { get; set; } = "";
         {
             ad.City = cityElement.GetString();
         }
+        if (json.TryGetProperty("sellerInformation", out JsonElement seller))
+        {
+            if (seller.TryGetProperty("sellerName", out JsonElement nameElement))
+            {
+                ad.SellerName = nameElement.GetString() ?? "";
+            }
+
+            if (seller.TryGetProperty("isVerified", out JsonElement verifiedElement))
+            {
+                ad.SellerVerified = verifiedElement.GetBoolean();
+            }
+        }
 
 
-       
         if (json.TryGetProperty("date", out JsonElement dateElement))
         {
             ad.Date = dateElement.GetString();
@@ -86,14 +131,25 @@ public string PriceType { get; set; } = "";
                 {
                     ad.CanShip = true;
                 }
+                if (key == "condition")
+                {
+                    ad.Condition = value;
+                }
+
+                if (key == "delivery")
+                {
+                    ad.Delivery = value;
+                }
             }
+            
         }
 
-        
+
         if (json.TryGetProperty("imageUrls", out JsonElement images) && images.GetArrayLength() > 0)
         {
             ad.Photo = "https:" + images[0].GetString();
             ad.Photo = ad.Photo.Replace("$_82", "$_85");
+            ad.PhotoCount = images.GetArrayLength();
         }
 
 
