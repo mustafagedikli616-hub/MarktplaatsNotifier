@@ -44,13 +44,17 @@ public class Listing
     public int SellerYears { get; set; } = -1;
     
     public string SellerType { get; set; } = "";
+    
+    public bool HasWebsiteLink { get; set; } = false;
+
+    public bool LikelyBusiness { get; set; } = false;
 
     public static Listing FromJson(JsonElement json)
     {
         Listing ad = new Listing(); // grab a blank form
 
-        ad.Id = json.GetProperty("itemId").GetString();
-        ad.Title = json.GetProperty("title").GetString();
+        ad.Id = json.GetProperty("itemId").GetString() ?? "";
+        ad.Title = json.GetProperty("title").GetString() ?? "";
 
         if (json.TryGetProperty("description", out JsonElement descriptionElement))
         {
@@ -60,6 +64,17 @@ public class Listing
         if (json.TryGetProperty("priorityProduct", out JsonElement priorityElement))
         {
             ad.IsBumped = priorityElement.GetString() != "NONE";
+        }
+        
+        if (json.TryGetProperty("traits", out JsonElement traits))
+        {
+            foreach (JsonElement trait in traits.EnumerateArray())
+            {
+                if (trait.GetString() == "URL")
+                {
+                    ad.HasWebsiteLink = true;
+                }
+            }
         }
 
 

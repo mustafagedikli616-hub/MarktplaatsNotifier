@@ -74,13 +74,14 @@ public static class Filters
                 }
             }
 
-            if (!found)
-            {
-                return false;
-            }
             if (!found && searchWord.Any(char.IsDigit) && squashedText.Contains(searchWord))
             {
                 found = true;
+            }
+
+            if (!found)
+            {
+                return false;
             }
         }
         

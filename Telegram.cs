@@ -78,6 +78,7 @@ public class Telegram
 
         message += $"🔍 via: {System.Net.WebUtility.HtmlEncode(ad.MatchedSearch)}\n";
         if (ad.IsBumped) { message += "🔁 Dagtopper (paid to the top, may be an old listing)\n"; }
+        if (ad.LikelyBusiness) { message += "🏢 Probably a business\n"; }
 
         message += $"\n🔗 <a href=\"https://www.marktplaats.nl{ad.Link}\">Bekijk advertentie</a>";
         if (alert != "")

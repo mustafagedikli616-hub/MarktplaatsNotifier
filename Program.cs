@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using MarktplaatsNotifier;
 
 AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
 {
@@ -124,6 +125,11 @@ HashSet<string> seenIds = new HashSet<string>();
 if (File.Exists("seen.txt"))
 {
     string[] savedIds = File.ReadAllLines("seen.txt");
+    if (savedIds.Length > 50000)
+    {
+        savedIds = savedIds[^50000..];
+        File.WriteAllLines("seen.txt", savedIds);
+    }
     foreach (string id in savedIds)
     {
         seenIds.Add(id);
@@ -134,6 +140,13 @@ if (File.Exists("seen.txt"))
 
 
 long lastUpdateId = 0;
+RequestLimiter limiter = new  RequestLimiter();
+SearchScheduler scheduler = new SearchScheduler();
+bool paused = false;
+DateTime skipDetailsUntil = DateTime.MinValue;
+DateTime startedAt = DateTime.Now;
+int checksDone = 0;
+int listingsSent = 0;
 
 
 string addStep = "";
@@ -163,7 +176,11 @@ try
         new { command = "list", description = "Show your searches" },
         new { command = "remove", description = "Remove a search" },
         new { command = "cancel", description = "Stop adding a search" },
+        new { command = "pause", description = "Pause searching" },
+        new { command = "resume", description = "Start searching again" },
+        new { command = "status", description = "Show how the bot is doing" },
         new { command = "help", description = "Show all commands" }
+        
     };
     string commandsJson = JsonSerializer.Serialize(commands);
     await client.GetStringAsync(
@@ -270,6 +287,9 @@ string helpText = "🤖 Commands:\n\n" +
                   "/remove search\n   example: /remove rtx 3070\n\n" +
                   "/list - show all your searches\n" +
                   "/cancel - stop adding a search\n" +
+                  "/pause - pause searching\n" +
+                  "/resume - start searching again\n" +
+                  "/status - show how the bot is doing\n" +
                   "/help - show this message";
 
 async Task CheckCommands()
@@ -349,6 +369,27 @@ async Task CheckCommands()
             {
                 await telegram.SendText(searchList.ListText());
             }
+            else if (text == "/pause")
+            {
+                paused = true;
+                await telegram.SendText("⏸️ Paused. Send /resume to start searching again.");
+            }
+            else if (text == "/resume")
+            {
+                paused = false;
+                await telegram.SendText("▶️ Searching again.");
+            }
+            else if (text == "/status")
+            {
+                TimeSpan running = DateTime.Now - startedAt;
+                string state = paused ? "⏸️ paused" : "▶️ running";
+                await telegram.SendText(
+                    $"🤖 Status: {state}\n" +
+                    $"⏱️ Running for {(int)running.TotalHours} h {running.Minutes} min\n" +
+                    $"🔎 {searchList.Prices.Count} searches, {checksDone} checks done\n" +
+                    $"📨 {listingsSent} listings sent\n" +
+                    $"🐢 {limiter.DelayMs} ms between requests");
+            }
             else if (text == "/help" || text == "/start")
             {
                 await telegram.SendText(helpText);
@@ -361,7 +402,6 @@ async Task CheckCommands()
     }
 }
 
-bool firstRound = true;
 int errorsInARow = 0;
 bool IsNew(string itemId)
 {
@@ -382,6 +422,7 @@ async Task<List<Listing>> FetchListings(string url)
         try { await telegram.SendText("✅ Back to normal, searches work again."); } catch { }
     }
     errorsInARow = 0;
+    limiter.Success();
 
     List<Listing> ads = new List<Listing>();
     using JsonDocument doc = JsonDocument.Parse(json);
@@ -412,6 +453,10 @@ string FindInText(string text, string pattern)
 
 async Task AddPageDetails(Listing ad)
 {
+    if (DateTime.Now < skipDetailsUntil)
+    {
+        return;
+    }
     try
     {
         string html = await client.GetStringAsync("https://www.marktplaats.nl" + ad.Link);
@@ -442,6 +487,11 @@ async Task AddPageDetails(Listing ad)
     catch (Exception ex)
     {
         Console.WriteLine($"Couldn't get extra info for '{ad.Title}': {ex.Message}");
+        if (ex is HttpRequestException httpError && (httpError.StatusCode == System.Net.HttpStatusCode.TooManyRequests || httpError.StatusCode == System.Net.HttpStatusCode.Forbidden))
+        {
+            skipDetailsUntil = DateTime.Now.AddMinutes(30);
+            Console.WriteLine("Listing pages are blocked: skipping extra info for 30 minutes.");
+        }
     }
 }
 async Task<bool> TrySend(Listing ad, string search)
@@ -487,8 +537,15 @@ async Task<bool> TrySend(Listing ad, string search)
     }
     ad.MatchedSearch = search;
     await AddPageDetails(ad);
+    if (ad.SellerType == "TRADER")
+    {
+        Console.WriteLine($"Skipped (business): {ad.Title}");
+        return false;
+    }
+    ad.LikelyBusiness = BusinessFilter.Score(ad) >= 2;
     await telegram.SendListing(ad, Filters.IsNight(), alert);
     await Task.Delay(1000);
+    listingsSent++;
     Console.WriteLine($"Sent ({search}): {ad.Title}");
     Console.WriteLine();
     return true;
@@ -505,146 +562,81 @@ async Task HandleError(string what, Exception ex)
         }
         if (ex is HttpRequestException httpError && (httpError.StatusCode == System.Net.HttpStatusCode.TooManyRequests || httpError.StatusCode == System.Net.HttpStatusCode.Forbidden))
         {
-            Console.WriteLine("Marktplaats says: too many requests. Pausing 2 minutes...");
-            for (int i = 0; i < 60; i++)
-            {
-                await CheckCommands();
-                await Task.Delay(2000);
-            }
+            limiter.Blocked();
         }
     }
 }
-HashSet<string> checkedCategories = new HashSet<string>();
 Dictionary<string, long> newestIdPerSearch = new Dictionary<string, long>();
 
 while (true)
 {
-    System.Diagnostics.Stopwatch timer = System.Diagnostics.Stopwatch.StartNew();
-    Console.WriteLine("Checking...");
     
-    Dictionary<string, List<string>> searchesByCategory = new Dictionary<string, List<string>>();
-    List<string> searchesWithoutCategory = new List<string>();
-
-    foreach (string search in searchList.Prices.Keys)
-    {
-        searchesWithoutCategory.Add(search);
-    }
-
-  
-    foreach (KeyValuePair<string, List<string>> group in searchesByCategory)
-    {
-        string category = group.Key;
-        bool quiet = firstRound || !checkedCategories.Contains(category);
-
-        try
-        {
-            for (int page = 0; page < 5; page++)
-            {
-                List<Listing> ads = await FetchListings(
-                    $"https://www.marktplaats.nl/lrp/api/search?l1CategoryId={category}&limit=100&offset={page * 100}&sortBy=SORT_INDEX&sortOrder=DECREASING&postcode={postcode}");
-
-                bool caughtUp = false;
-                foreach (Listing ad in ads)
-                {
-                    if (!ad.IsBumped && seenIds.Contains(ad.Id))
-                    {
-                        caughtUp = true;
-                    }
-
-                    if (!IsNew(ad.Id))
-                    {
-                        continue;
-                    }
-
-                    if (quiet)
-                    {
-                        continue;
-                    }
-
-                    foreach (string search in group.Value)
-                    {
-                        if (Filters.MatchesSearch(search, ad) && await TrySend(ad, search))
-                        {
-                            break;
-                        }
-                    }
-                }
-
-                if (caughtUp || ads.Count == 0)
-                {
-                    break;
-                }
-
-                await Task.Delay(1000);
-            }
-
-            checkedCategories.Add(category);
-        }
-        catch (Exception ex)
-        {
-            await HandleError($"category {category}", ex);
-        }
-
-        await CheckCommands();
-        await Task.Delay(1000);
-    }
-
-
-    foreach (string search in searchesWithoutCategory)
-    {
-        bool quiet = firstRound || searchList.NewSearches.Contains(search);
-
-        try
-        {
-            string url = $"https://www.marktplaats.nl/lrp/api/search?query={Uri.EscapeDataString(search)}&limit=30&sortBy=SORT_INDEX&sortOrder=DECREASING&postcode={postcode}";
-            if (searchList.Categories[search] != "")
-            {
-                url += $"&l1CategoryId={searchList.Categories[search]}";
-            }
-            List<Listing> ads = await FetchListings(url);
-
-            long newest = newestIdPerSearch.GetValueOrDefault(search, 0);
-            long highestThisRound = newest;
-
-            foreach (Listing ad in ads)
-            {
-                long.TryParse(ad.Id.Substring(1), out long idNumber);
-                if (idNumber > highestThisRound)
-                {
-                    highestThisRound = idNumber;
-                }
-
-                if (!IsNew(ad.Id))
-                {
-                    continue;
-                }
-
-                if (quiet || idNumber <= newest)
-                {
-                    continue;
-                }
-
-                await TrySend(ad, search);
-            }
-
-            newestIdPerSearch[search] = highestThisRound;
-        }
-        catch (Exception ex)
-        {
-            await HandleError(search, ex);
-        }
-
-        searchList.NewSearches.Remove(search);
-        await CheckCommands();
-        await Task.Delay(1000);
-    }
-
-    firstRound = false;
-    Console.WriteLine($"Round done in {timer.Elapsed.TotalSeconds:0} seconds ({searchList.Prices.Count} searches, {searchesByCategory.Count} categories)");
-
-    for (int i = 0; i < 15; i++)
+    if (paused)
     {
         await CheckCommands();
         await Task.Delay(2000);
+        continue;
     }
+
+ 
+    string search = scheduler.NextDue(searchList.Prices.Keys);
+    if (search == "")
+    {
+       
+        await CheckCommands();
+        await Task.Delay(1000);
+        continue;
+    }
+
+    
+    bool quiet = !newestIdPerSearch.ContainsKey(search);
+    bool foundNew = false;
+
+    try
+    {
+        string url = $"https://www.marktplaats.nl/lrp/api/search?query={Uri.EscapeDataString(search)}&limit=30&sortBy=SORT_INDEX&sortOrder=DECREASING&postcode={postcode}";
+        if (searchList.Categories[search] != "")
+        {
+            url += $"&l1CategoryId={searchList.Categories[search]}";
+        }
+        List<Listing> ads = await FetchListings(url);
+        checksDone++;
+
+        long newest = newestIdPerSearch.GetValueOrDefault(search, 0);
+        long highestThisCheck = newest;
+
+        foreach (Listing ad in ads)
+        {
+            long.TryParse(ad.Id.Substring(1), out long idNumber);
+            if (idNumber > highestThisCheck)
+            {
+                highestThisCheck = idNumber;
+            }
+
+            if (quiet || idNumber <= newest)
+            {
+                IsNew(ad.Id);
+                continue;
+            }
+
+            foundNew = true;
+
+            if (!IsNew(ad.Id))
+            {
+                continue;
+            }
+
+            await TrySend(ad, search);
+        }
+
+        newestIdPerSearch[search] = highestThisCheck;
+    }
+    catch (Exception ex)
+    {
+        await HandleError(search, ex);
+    }
+
+    scheduler.Done(search, foundNew, searchList.UrgentSearches.Contains(search), Filters.IsNight());
+    await CheckCommands();
+    await Task.Delay(limiter.DelayMs);
 }
