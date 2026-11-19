@@ -526,19 +526,7 @@ while (true)
 
     foreach (string search in searchList.Prices.Keys)
     {
-        string category = searchList.Categories[search];
-        if (category == "")
-        {
-            searchesWithoutCategory.Add(search);
-        }
-        else
-        {
-            if (!searchesByCategory.ContainsKey(category))
-            {
-                searchesByCategory[category] = new List<string>();
-            }
-            searchesByCategory[category].Add(search);
-        }
+        searchesWithoutCategory.Add(search);
     }
 
   
@@ -607,8 +595,12 @@ while (true)
 
         try
         {
-            List<Listing> ads = await FetchListings(
-                $"https://www.marktplaats.nl/lrp/api/search?query={Uri.EscapeDataString(search)}&limit=30&sortBy=SORT_INDEX&sortOrder=DECREASING&postcode={postcode}");
+            string url = $"https://www.marktplaats.nl/lrp/api/search?query={Uri.EscapeDataString(search)}&limit=30&sortBy=SORT_INDEX&sortOrder=DECREASING&postcode={postcode}";
+            if (searchList.Categories[search] != "")
+            {
+                url += $"&l1CategoryId={searchList.Categories[search]}";
+            }
+            List<Listing> ads = await FetchListings(url);
 
             foreach (Listing ad in ads)
             {
