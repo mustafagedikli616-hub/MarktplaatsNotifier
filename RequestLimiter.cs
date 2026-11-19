@@ -9,7 +9,7 @@ public class RequestLimiter
     
     public void Success()
     {
-        DelayMs = Math.Max(MinDelayMs, DelayMs - 50);
+        DelayMs = Math.Max(MinDelayMs, (int)(DelayMs * 0.97));
     }
     
     public void Blocked()

@@ -20,6 +20,9 @@ void StopWithError(string message)
 
 HttpClient client = new HttpClient();
 client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0");
+client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36");
+client.DefaultRequestHeaders.Add("Accept", "application/json, text/plain, */*");
+client.DefaultRequestHeaders.Add("Accept-Language", "nl-NL,nl;q=0.9,en;q=0.8");
 
 SearchList searchList = new SearchList();
 string loadError = searchList.Load();
