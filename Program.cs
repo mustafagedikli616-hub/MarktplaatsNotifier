@@ -503,7 +503,7 @@ async Task HandleError(string what, Exception ex)
         {
             try { await telegram.SendText($"⚠️ 5 errors in a row. Marktplaats might be blocking me, or the internet is down.\nLast error: {ex.Message}"); } catch { }
         }
-        if (ex is HttpRequestException httpError && httpError.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+        if (ex is HttpRequestException httpError && (httpError.StatusCode == System.Net.HttpStatusCode.TooManyRequests || httpError.StatusCode == System.Net.HttpStatusCode.Forbidden))
         {
             Console.WriteLine("Marktplaats says: too many requests. Pausing 2 minutes...");
             for (int i = 0; i < 60; i++)
@@ -515,6 +515,7 @@ async Task HandleError(string what, Exception ex)
     }
 }
 HashSet<string> checkedCategories = new HashSet<string>();
+Dictionary<string, long> newestIdPerSearch = new Dictionary<string, long>();
 
 while (true)
 {
@@ -602,20 +603,31 @@ while (true)
             }
             List<Listing> ads = await FetchListings(url);
 
+            long newest = newestIdPerSearch.GetValueOrDefault(search, 0);
+            long highestThisRound = newest;
+
             foreach (Listing ad in ads)
             {
+                long.TryParse(ad.Id.Substring(1), out long idNumber);
+                if (idNumber > highestThisRound)
+                {
+                    highestThisRound = idNumber;
+                }
+
                 if (!IsNew(ad.Id))
                 {
                     continue;
                 }
 
-                if (quiet)
+                if (quiet || idNumber <= newest)
                 {
                     continue;
                 }
 
                 await TrySend(ad, search);
             }
+
+            newestIdPerSearch[search] = highestThisRound;
         }
         catch (Exception ex)
         {
