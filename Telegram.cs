@@ -42,6 +42,7 @@ public class Telegram
         message += $"💶 {ad.PriceText}";
         if (ad.Condition != "") { message += $" · 🏷️ {ad.Condition}"; }
         message += "\n";
+        if (ad.OldPrice > 0) { message += $"📉 Price drop: €{ad.OldPrice} → €{ad.Price}\n"; }
 
         message += $"📍 {place}";
         if (ad.Delivery != "") { message += $" · 📦 {ad.Delivery}"; }
@@ -75,7 +76,14 @@ public class Telegram
             if (snippet.Length > 150) { snippet = snippet.Substring(0, 150) + "..."; }
             message += $"📝 <i>{System.Net.WebUtility.HtmlEncode(snippet)}</i>\n";
         }
-
+        if (ad.Hint != "")
+        {
+            message += $"{System.Net.WebUtility.HtmlEncode(ad.Hint)}\n";
+            if (ad.HintQuestion != "")
+            {
+                message += $"💬 Ask: <code>{System.Net.WebUtility.HtmlEncode(ad.HintQuestion)}</code>\n";
+            }
+        }
         message += $"🔍 via: {System.Net.WebUtility.HtmlEncode(ad.MatchedSearch)}\n";
         if (ad.IsBumped) { message += "🔁 Dagtopper (paid to the top, may be an old listing)\n"; }
         if (ad.LikelyBusiness) { message += "🏢 Probably a business\n"; }
@@ -95,14 +103,22 @@ public class Telegram
 
         if (ad.Photo != "")
         {
-            string encodedPhoto = Uri.EscapeDataString(ad.Photo);
-            await client.GetStringAsync(
-                $"https://api.telegram.org/bot{token}/sendPhoto?chat_id={chatId}&photo={encodedPhoto}&caption={encoded}&parse_mode=HTML{silent}");
+            try
+            {
+                string encodedPhoto = Uri.EscapeDataString(ad.Photo);
+                await client.GetStringAsync(
+                    $"https://api.telegram.org/bot{token}/sendPhoto?chat_id={chatId}&photo={encodedPhoto}&caption={encoded}&parse_mode=HTML{silent}");
+                return;
+            }
+            catch (HttpRequestException)
+            {
+               
+                Console.WriteLine("Photo message failed, sending as text instead.");
+            }
         }
-        else
-        {
-            await client.GetStringAsync(
-                $"https://api.telegram.org/bot{token}/sendMessage?chat_id={chatId}&text={encoded}&parse_mode=HTML{silent}");
-        }
+
+        await client.GetStringAsync(
+            $"https://api.telegram.org/bot{token}/sendMessage?chat_id={chatId}&text={encoded}&parse_mode=HTML{silent}");
+        
     }
 }

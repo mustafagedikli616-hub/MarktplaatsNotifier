@@ -29,6 +29,8 @@ if (loadError != "")
 {
     StopWithError(loadError);
 }
+RepairHints hints = new RepairHints();
+hints.Load();
 
 if (!File.Exists("secrets.txt"))
 {
@@ -475,6 +477,13 @@ async Task AddPageDetails(Listing ad)
         if (saves != "") { ad.Saves = int.Parse(saves); }
         if (since != "") { ad.PostedAt = DateTime.Parse(since); }
         if (years != "") { ad.SellerYears = int.Parse(years); }
+      
+        Match description = Regex.Match(html, """data-collapsable="description">(.*?)</div>""", RegexOptions.Singleline);
+        if (description.Success)
+        {
+            string text = Regex.Replace(description.Groups[1].Value, "<[^>]+>", "\n");
+            ad.Description = System.Net.WebUtility.HtmlDecode(text).Trim();
+        }
 
         foreach (Match bid in Regex.Matches(bids, """value":(\d+)"""))
         {
@@ -496,7 +505,7 @@ async Task AddPageDetails(Listing ad)
         }
     }
 }
-async Task<bool> TrySend(Listing ad, string search)
+async Task<bool> TrySend(Listing ad, string search, string forcedAlert = "")
 {
     if (!searchList.Prices.ContainsKey(search))
     {
@@ -529,7 +538,11 @@ async Task<bool> TrySend(Listing ad, string search)
     }
 
     string alert = "";
-    if (Filters.IsSuperDeal(ad, maxPrice))
+    if (forcedAlert != "")
+    {
+        alert = forcedAlert;
+    }
+    else if (Filters.IsSuperDeal(ad, maxPrice))
     {
         alert = "SUPER DEAL";
     }
@@ -539,12 +552,25 @@ async Task<bool> TrySend(Listing ad, string search)
     }
     ad.MatchedSearch = search;
     await AddPageDetails(ad);
+    
+    string lateBadWord = Filters.FindBadFault(ad.Description, searchList.SkipWords[search]);
+    if (lateBadWord != "")
+    {
+        Console.WriteLine($"Skipped ({lateBadWord}, in full description): {ad.Title}");
+        return false;
+    }
     if (ad.SellerType == "TRADER")
     {
         Console.WriteLine($"Skipped (business): {ad.Title}");
         return false;
     }
     ad.LikelyBusiness = BusinessFilter.Score(ad) >= 2;
+    RepairHint? hint = hints.Find(ad.Title + ". " + ad.Description);
+    if (hint != null)
+    {
+        ad.Hint = hint.Text;
+        ad.HintQuestion = hint.Question;
+    }
     await telegram.SendListing(ad, Filters.IsNight(), alert);
     await Task.Delay(1000);
     listingsSent++;
@@ -569,6 +595,7 @@ async Task HandleError(string what, Exception ex)
     }
 }
 Dictionary<string, long> newestIdPerSearch = new Dictionary<string, long>();
+Dictionary<string, double> lastPrices = new Dictionary<string, double>();
 
 while (true)
 {
@@ -615,6 +642,15 @@ while (true)
                 highestThisCheck = idNumber;
             }
 
+            if (lastPrices.TryGetValue(ad.Id, out double oldPrice) && ad.Price > 0 && ad.Price < oldPrice)
+            {
+                lastPrices[ad.Id] = ad.Price;
+                ad.OldPrice = oldPrice;
+                await TrySend(ad, search, "PRICE DROP");
+                continue;
+            }
+            lastPrices[ad.Id] = ad.Price;
+
             if (quiet || idNumber <= newest)
             {
                 IsNew(ad.Id);
@@ -632,6 +668,11 @@ while (true)
         }
 
         newestIdPerSearch[search] = highestThisCheck;
+      
+        if (lastPrices.Count > 100000)
+        {
+            lastPrices.Clear();
+        }
     }
     catch (Exception ex)
     {

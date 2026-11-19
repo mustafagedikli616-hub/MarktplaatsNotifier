@@ -15,6 +15,7 @@ seen.txt
 *~
 publish/
 *.zip
+hints.txt
 
 # Backups
 *.bak

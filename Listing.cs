@@ -48,6 +48,12 @@ public class Listing
     public bool HasWebsiteLink { get; set; } = false;
 
     public bool LikelyBusiness { get; set; } = false;
+    
+    public double OldPrice { get; set; } = 0;
+
+    public string Hint { get; set; } = "";
+
+    public string HintQuestion { get; set; } = "";
 
     public static Listing FromJson(JsonElement json)
     {
