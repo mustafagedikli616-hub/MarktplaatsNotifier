@@ -19,6 +19,7 @@ public class RepairHints
         "# Repair hints: words;hint;question to ask the seller",
         "# Words are separated by commas. Use + when ALL parts must be there, like: ps5+geen beeld",
         "# Rules are checked from top to bottom. Only the first one that fits is shown.",
+        "scherm is gebroken,scherm gebroken,gebroken scherm,barst,glas kapot;💡 Broken screen: for monitors and TVs a new panel usually costs more than it's worth, for phones check the price of a new screen first;Is er achter de barst nog beeld te zien?",
         "ps5+geen beeld,playstation+geen beeld,xbox+geen beeld;💡 Console without picture: often the HDMI port or the HDMI chip;Kun je een foto sturen van de HDMI-poort?",
         "hdmi poort,hdmi-poort,hdmi kapot,hdmi defect;💡 Broken HDMI port: needs hot air to replace, check the photos for bent pins;Kun je een foto sturen van de HDMI-poort?",
         "geen beeld+geluid,zwart scherm+geluid,donker scherm+geluid;💡 Sound but no picture: usually the backlight or the power board;Als je met een zaklamp op het scherm schijnt, zie je dan iets?",
@@ -32,6 +33,7 @@ public class RepairHints
         "accu kapot,accu slecht,accu defect,batterij kapot,batterij slecht,batterij defect;💡 Bad battery: usually an easy, cheap swap;Werkt hij wel als hij aan de lader zit?",
         "geen signaal,no signal;💡 \"No signal\": often the cable or the source, sometimes the main board;Heb je hem met een andere kabel en een ander apparaat geprobeerd?",
         "ventilator+lawaai,maakt lawaai,veel herrie;💡 Loud fan: usually dust, clean it and use new thermal paste;Is hij ooit schoongemaakt?"
+        
     };
 
     public void Load()

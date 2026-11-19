@@ -54,6 +54,16 @@ public class Listing
     public string Hint { get; set; } = "";
 
     public string HintQuestion { get; set; } = "";
+    
+    public double TypicalPrice { get; set; } = 0;
+
+    public int TypicalCount { get; set; } = 0;
+
+    public string RepostInfo { get; set; } = "";
+    
+    public int CategoryId { get; set; } = 0;
+
+    public string CategoryName { get; set; } = "";
 
     public static Listing FromJson(JsonElement json)
     {
@@ -65,6 +75,11 @@ public class Listing
         if (json.TryGetProperty("description", out JsonElement descriptionElement))
         {
             ad.Description = descriptionElement.GetString() ?? "";
+        }
+        
+        if (json.TryGetProperty("categoryId", out JsonElement categoryElement))
+        {
+            ad.CategoryId = categoryElement.GetInt32();
         }
 
         if (json.TryGetProperty("priorityProduct", out JsonElement priorityElement))

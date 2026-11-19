@@ -43,6 +43,13 @@ public class Telegram
         if (ad.Condition != "") { message += $" · 🏷️ {ad.Condition}"; }
         message += "\n";
         if (ad.OldPrice > 0) { message += $"📉 Price drop: €{ad.OldPrice} → €{ad.Price}\n"; }
+        if (ad.TypicalPrice > 0)
+        {
+            int difference = (int)Math.Round((ad.Price - ad.TypicalPrice) / ad.TypicalPrice * 100);
+            string compared = difference <= 0 ? $"{-difference}% under" : $"{difference}% over";
+            message += $"📊 Typical €{ad.TypicalPrice} ({ad.TypicalCount} listings) · {compared}\n";
+        }
+        if (ad.RepostInfo != "") { message += $"🔁 {ad.RepostInfo}\n"; }
 
         message += $"📍 {place}";
         if (ad.Delivery != "") { message += $" · 📦 {ad.Delivery}"; }
@@ -84,7 +91,9 @@ public class Telegram
                 message += $"💬 Ask: <code>{System.Net.WebUtility.HtmlEncode(ad.HintQuestion)}</code>\n";
             }
         }
-        message += $"🔍 via: {System.Net.WebUtility.HtmlEncode(ad.MatchedSearch)}\n";
+        message += $"🔍 via: {System.Net.WebUtility.HtmlEncode(ad.MatchedSearch)}";
+        if (ad.CategoryName != "") { message += $" · 📂 {System.Net.WebUtility.HtmlEncode(ad.CategoryName)} ({ad.CategoryId})"; }
+        message += "\n";
         if (ad.IsBumped) { message += "🔁 Dagtopper (paid to the top, may be an old listing)\n"; }
         if (ad.LikelyBusiness) { message += "🏢 Probably a business\n"; }
 

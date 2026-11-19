@@ -4,6 +4,8 @@ public class SearchList
     public Dictionary<string, int> Prices { get; } = new Dictionary<string, int>();         
     public Dictionary<string, string> Categories { get; } = new Dictionary<string, string>(); 
     
+    public Dictionary<string, int> SubCategories { get; } = new Dictionary<string, int>();
+    
     public Dictionary<string, string[]> SkipWords { get; } = new Dictionary<string, string[]>();
     public HashSet<string> NewSearches { get; } = new HashSet<string>(); 
     
@@ -30,6 +32,17 @@ public class SearchList
         {
             category = parts[2].Trim();
         }
+        
+        int subCategory = 0;
+        if (category.Contains('/'))
+        {
+            string[] pieces = category.Split('/');
+            category = pieces[0].Trim();
+            if (!int.TryParse(pieces[1].Trim(), out subCategory))
+            {
+                return $"❌ \"{pieces[1].Trim()}\" is not a valid subcategory. Use numbers, like 356/2954.";
+            }
+        }
 
         if (category != "" && !int.TryParse(category, out _))
         {
@@ -43,6 +56,7 @@ public class SearchList
 
         Prices.Add(searchText, limit);
         Categories.Add(searchText, category);
+        SubCategories.Add(searchText, subCategory);
         SkipWords.Add(searchText, new string[0]);
         NewSearches.Add(searchText);
 
@@ -50,6 +64,10 @@ public class SearchList
         if (category != "")
         {
             newLine += $";{category}";
+        }
+        if (subCategory != 0)
+        {
+            newLine += $"/{subCategory}";
         }
 
         string fileText = File.ReadAllText("searches.txt");
@@ -72,6 +90,7 @@ public class SearchList
 
         Prices.Remove(searchText);
         Categories.Remove(searchText);
+        SubCategories.Remove(searchText);
         SkipWords.Remove(searchText);
         UrgentSearches.Remove(searchText);
 
@@ -142,6 +161,17 @@ public class SearchList
             {
                 category = parts[2].Trim();
             }
+            int subCategory = 0;
+            if (category.Contains('/'))
+            {
+                string[] pieces = category.Split('/');
+                category = pieces[0].Trim();
+                if (!int.TryParse(pieces[1].Trim(), out subCategory))
+                {
+                    return
+                        $"Line {lineNumber} in searches.txt: \"{pieces[1].Trim()}\" is not a valid subcategory. Use numbers, like 356/2954.";
+                }
+            }
 
             if (category != "" && !int.TryParse(category, out _))
             {
@@ -173,6 +203,7 @@ public class SearchList
 
             Prices.Add(searchText, limit);
             Categories.Add(searchText, category);
+            SubCategories.Add(searchText, subCategory);
             SkipWords.Add(searchText, skipWords);
             if (urgent == "urgent")
             {
