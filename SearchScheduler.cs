@@ -1,7 +1,5 @@
 namespace MarktplaatsNotifier;
 
-// Decides WHICH search to check next, and WHEN.
-// Busy searches get checked often, quiet searches less often.
 public class SearchScheduler
 {
     private const double StartSeconds = 180;      
