@@ -681,6 +681,8 @@ async Task HandleError(string what, Exception ex)
 }
 
 Dictionary<string, long> newestIdPerSearch = new Dictionary<string, long>();
+List<string> startOrder = searchList.Prices.Keys.OrderBy(search => searchList.UrgentSearches.Contains(search) ? 0 : 1).ToList();
+scheduler.SpreadStart(startOrder, 4);
 
 while (true)
 {

@@ -11,7 +11,15 @@ public class SearchScheduler
     private Dictionary<string, DateTime> nextCheck = new Dictionary<string, DateTime>();
     private Dictionary<string, double> waitSeconds = new Dictionary<string, double>();
 
-   
+    public void SpreadStart(IEnumerable<string> searches, int secondsApart)
+    {
+        int position = 0;
+        foreach (string search in searches)
+        {
+            nextCheck[search] = DateTime.Now.AddSeconds(position * secondsApart);
+            position++;
+        }
+    }
     public string NextDue(IEnumerable<string> searches)
     {
         string best = "";
