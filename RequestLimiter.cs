@@ -10,6 +10,9 @@ public class RequestLimiter
 
     public int DelayMs { get; private set; } = 3000;
 
+   
+    public DateTime PausedUntil { get; private set; } = DateTime.MinValue;
+
     
     public int NextWaitMs()
     {
@@ -19,7 +22,7 @@ public class RequestLimiter
 
     public void Success()
     {
-        
+       
         if (DateTime.Now < calmUntil)
         {
             return;
@@ -28,10 +31,12 @@ public class RequestLimiter
         DelayMs = Math.Max(MinDelayMs, (int)(DelayMs * 0.97));
     }
 
+    
     public void Blocked()
     {
         DelayMs = Math.Min(MaxDelayMs, DelayMs * 2);
-        calmUntil = DateTime.Now.AddMinutes(10);
-        Console.WriteLine($"Slowing down: now {DelayMs} ms between requests (staying slow for 10 minutes)");
+        PausedUntil = DateTime.Now.AddMinutes(3);
+        calmUntil = DateTime.Now.AddMinutes(15);
+        Console.WriteLine($"Blocked: pausing 3 minutes, then {DelayMs} ms between requests");
     }
 }

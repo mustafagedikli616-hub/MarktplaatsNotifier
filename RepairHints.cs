@@ -13,7 +13,7 @@ public class RepairHints
 {
     private List<RepairHint> rules = new List<RepairHint>();
 
-    // Used the first time, when hints.txt doesn't exist yet
+
     private static string[] defaultLines =
     {
         "# Repair hints: words;hint;question to ask the seller",

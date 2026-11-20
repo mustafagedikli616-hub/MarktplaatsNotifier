@@ -690,8 +690,19 @@ async Task HandleError(string what, Exception ex)
 }
 
 Dictionary<string, long> newestIdPerSearch = new Dictionary<string, long>();
+if (File.Exists("newest.txt"))
+{
+    foreach (string line in File.ReadAllLines("newest.txt"))
+    {
+        string[] parts = line.Split(';');
+        if (parts.Length == 2 && long.TryParse(parts[1], out long savedId))
+        {
+            newestIdPerSearch[parts[0]] = savedId;
+        }
+    }
+}
 List<string> startOrder = searchList.Prices.Keys.OrderBy(search => searchList.UrgentSearches.Contains(search) ? 0 : 1).ToList();
-scheduler.SpreadStart(startOrder, 4);
+scheduler.SpreadStart(startOrder, 10);
 
 while (true)
 {
@@ -699,6 +710,11 @@ while (true)
     {
         await CheckCommands();
         await Task.Delay(2000);
+        continue;
+    }
+    if (DateTime.Now < limiter.PausedUntil)
+    {
+        await WaitAndListen(1000);
         continue;
     }
 
@@ -757,6 +773,7 @@ while (true)
         }
 
         newestIdPerSearch[search] = highestThisCheck;
+        File.WriteAllLines("newest.txt", newestIdPerSearch.Select(pair => $"{pair.Key};{pair.Value}"));
 
         history.SaveIfNeeded();
     }
