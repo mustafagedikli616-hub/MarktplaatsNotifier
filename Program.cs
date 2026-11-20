@@ -301,7 +301,16 @@ string helpText = "🤖 Commands:\n\n" +
                   "/resume - start searching again\n" +
                   "/status - show how the bot is doing\n" +
                   "/help - show this message";
-
+async Task WaitAndListen(int milliseconds)
+{
+    DateTime until = DateTime.Now.AddMilliseconds(milliseconds);
+    while (DateTime.Now < until)
+    {
+        await CheckCommands();
+        int left = (int)(until - DateTime.Now).TotalMilliseconds;
+        await Task.Delay(Math.Clamp(left, 0, 1000));
+    }
+}
 async Task CheckCommands()
 {
     try
@@ -757,6 +766,5 @@ while (true)
     }
 
     scheduler.Done(search, foundNew, searchList.UrgentSearches.Contains(search), Filters.IsNight());
-    await CheckCommands();
-    await Task.Delay(limiter.DelayMs);
+    await WaitAndListen(limiter.NextWaitMs());
 }
