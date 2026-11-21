@@ -64,6 +64,8 @@ public class Listing
     public int CategoryId { get; set; } = 0;
 
     public string CategoryName { get; set; } = "";
+    
+    public string FaultReason { get; set; } = "";
 
     public static Listing FromJson(JsonElement json)
     {

@@ -10,6 +10,7 @@ public class SearchList
     public HashSet<string> NewSearches { get; } = new HashSet<string>(); 
     
     public HashSet<string> UrgentSearches { get; } = new HashSet<string>();
+    public HashSet<string> DefectSearches { get; } = new HashSet<string>();
     
     
     public string Add(string line)
@@ -93,6 +94,7 @@ public class SearchList
         SubCategories.Remove(searchText);
         SkipWords.Remove(searchText);
         UrgentSearches.Remove(searchText);
+        DefectSearches.Remove(searchText);
 
         List<string> keptLines = new List<string>();
         foreach (string fileLine in File.ReadAllLines("searches.txt"))
@@ -190,24 +192,32 @@ public class SearchList
                 return
                     $"Line {lineNumber} in searches.txt: \"{searchText}\" is in the file twice. Remove one of them.";
             }
-            string urgent = "";
+            string[] flags = new string[0];
             if (parts.Length > 4)
             {
-                urgent = parts[4].Trim().ToLower();
+                flags = parts[4].ToLower().Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
             }
 
-            if (urgent != "" && urgent != "urgent")
+            foreach (string flag in flags)
             {
-                return $"Line {lineNumber} in searches.txt: \"{urgent}\" is not valid. Use urgent, or leave it out.";
+                if (flag != "urgent" && flag != "defect")
+                {
+                    return $"Line {lineNumber} in searches.txt: \"{flag}\" is not valid. Use urgent, defect or urgent,defect, or leave it out.";
+                }
             }
 
             Prices.Add(searchText, limit);
             Categories.Add(searchText, category);
             SubCategories.Add(searchText, subCategory);
             SkipWords.Add(searchText, skipWords);
-            if (urgent == "urgent")
+            if (flags.Contains("urgent"))
             {
                 UrgentSearches.Add(searchText);
+            }
+
+            if (flags.Contains("defect"))
+            {
+                DefectSearches.Add(searchText);
             }
             
         }

@@ -88,5 +88,79 @@ public static class Filters
 
         return true;
     }
+        private static string[] faultWords =
+    {
+        "defect", "defecte", "kapot", "kapotte", "is stuk", "gaat stuk", "werkt niet", "niet werkend",
+        "doet het niet", "doet niks", "doet niets", "doet helemaal niks",
+        "geen beeld", "geen stroom", "geen signaal", "geen geluid", "leest geen",
+        "valt uit", "slaat af", "gaat niet aan", "gaat niet meer aan", "niet aangaat", "niet meer aangaat",
+        "niet meer aan", "start niet", "laadt niet", "niet meer goed", "werkt niet goed", "werkt niet altijd",
+        "werkt half", "half werkend", "beperkt werkend", "werkt soms", "hapert", "loopt vast", "blijft hangen",
+        "vastloper", "herstart steeds", "herstart vanzelf", "blijft herstarten", "geen wifi", "geen bluetooth",
+        "herrie", "lawaai", "oververhit", "oververhitting", "wordt heet", "wordt erg warm",
+        "zwart scherm", "blauw scherm", "bluescreen", "knippert", "flikkert", "strepen", "piept", "bootloop",
+        "dode pixel", "dode pixels", "pixelfout",
+        "barst", "barstje", "barsten", "gebarsten", "gebroken", "kapotgevallen", "gevallen", "schermschade",
+        "scherm beschadigd", "beschadigd scherm", "stickdrift", "stick drift", "drift", "vermoedelijk",
+        "fan kapot", "ventilator kapot",
+        "voor onderdelen", "als onderdelen", "voor parts", "for parts", "reparatie nodig", "te repareren", "klusser",
+        "handige harry", "handig is", "knutselaar", "zoals hij is", "zoals deze is", "zoals het is", "as is",
+        "zonder adapter", "zonder voet", "zonder voeding", "zonder ssd", "zonder harde schijf", "zonder oplader",
+        "broken", "not working", "faulty"
+    };
+
+    private static string[] notWords = { "geen ", "zonder ", "niet ", "nooit ", "geen enkele ", "zonder enige " };
+
     
+    public static string FindFaultWord(Listing ad)
+    {
+        if (ad.Condition.ToLower() == "niet werkend")
+        {
+            return "niet werkend";
+        }
+
+        string[] words = (ad.Title + " " + ad.Description).ToLower()
+            .Split(new char[] { ' ', '\n', '\r', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+        string text = string.Join(" ", words);
+
+        foreach (string faultWord in faultWords)
+        {
+            if (HasWholeWord(text, faultWord))
+            {
+                return faultWord;
+            }
+        }
+
+        return "";
+    }
+
+    private static bool HasWholeWord(string text, string word)
+    {
+        int index = text.IndexOf(word);
+        while (index >= 0)
+        {
+            int end = index + word.Length;
+            bool startOk = index == 0 || !char.IsLetterOrDigit(text[index - 1]);
+            bool endOk = end == text.Length || !char.IsLetterOrDigit(text[end]);
+
+            string before = text.Substring(0, index);
+            bool negated = false;
+            foreach (string notWord in notWords)
+            {
+                if (before.EndsWith(notWord))
+                {
+                    negated = true;
+                }
+            }
+
+            if (startOk && endOk && !negated)
+            {
+                return true;
+            }
+
+            index = text.IndexOf(word, index + 1);
+        }
+
+        return false;
+    }
 }

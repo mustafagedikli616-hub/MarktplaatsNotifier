@@ -573,7 +573,16 @@ async Task<bool> TrySend(Listing ad, string search, string forcedAlert = "")
     }
 
     int maxPrice = searchList.Prices[search];
+    int subCategory = searchList.SubCategories[search];
+    if (subCategory != 0 && ad.CategoryId != subCategory)
+    {
+        return false;
+    }
 
+    if (forcedAlert == "" && seenIds.Contains(ad.Id))
+    {
+        return false;
+    }
     if (Filters.IsNotForSale(ad.Title))
     {
         return false;
@@ -621,6 +630,29 @@ async Task<bool> TrySend(Listing ad, string search, string forcedAlert = "")
         Console.WriteLine($"Skipped ({lateBadWord}, in full description): {ad.Title}");
         return false;
     }
+    if (ad.Price > 0)
+    {
+        ad.TypicalPrice = history.TypicalPrice(search, ad.CategoryId, out int count);
+        ad.TypicalCount = count;
+    }
+
+    if (searchList.DefectSearches.Contains(search))
+    {
+        string faultWord = Filters.FindFaultWord(ad);
+        if (faultWord != "")
+        {
+            ad.FaultReason = $"🛠️ Fault: {faultWord}";
+        }
+        else if (ad.Price > 0 && ad.TypicalPrice > 0 && ad.Price <= ad.TypicalPrice * 0.4)
+        {
+            ad.FaultReason = "🤔 No fault mentioned, but very cheap: ask what's wrong";
+        }
+        else
+        {
+            Console.WriteLine($"Skipped (doesn't look broken): {ad.Title}");
+            return false;
+        }
+    }
 
     if (ad.SellerType == "TRADER")
     {
@@ -636,11 +668,7 @@ async Task<bool> TrySend(Listing ad, string search, string forcedAlert = "")
         ad.HintQuestion = hint.Question;
     }
 
-    if (ad.Price > 0)
-    {
-        ad.TypicalPrice = history.TypicalPrice(search, ad.CategoryId, out int count);
-        ad.TypicalCount = count;
-    }
+    
 
 
     HistoryEntry? earlier = history.FindRepost(ad);
@@ -738,6 +766,10 @@ while (true)
         if (searchList.Categories[search] != "")
         {
             url += $"&l1CategoryId={searchList.Categories[search]}";
+        }
+        if (searchList.SubCategories[search] != 0)
+        {
+            url += $"&l2CategoryId={searchList.SubCategories[search]}";
         }
 
         List<Listing> ads = await FetchListings(url);

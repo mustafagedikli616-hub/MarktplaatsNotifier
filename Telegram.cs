@@ -50,7 +50,7 @@ public class Telegram
             message += $"📊 Typical €{ad.TypicalPrice} ({ad.TypicalCount} listings) · {compared}\n";
         }
         if (ad.RepostInfo != "") { message += $"🔁 {ad.RepostInfo}\n"; }
-
+        if (ad.FaultReason != "") { message += $"{ad.FaultReason}\n"; }
         message += $"📍 {place}";
         if (ad.Delivery != "") { message += $" · 📦 {ad.Delivery}"; }
         message += "\n";
