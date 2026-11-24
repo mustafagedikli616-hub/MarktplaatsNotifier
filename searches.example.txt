@@ -34,7 +34,7 @@ xbox one;40;356/2896;waterschade;defect
 # ---------- CONSOLES: controllers with stick drift (bought instantly, easy fix) ----------
 ps5 controller;20;356/2801;;defect
 
-# ---------- CONSOLES: working, cheap (GTA 6 for the siblings) ----------
+# ---------- CONSOLES: working, cheap ----------
 xbox series s;260;356/2955;defect,kapot,geen beeld,valt uit,waterschade;urgent
 
 # ---------- MONITORS: broken (backlight / power board / T-con) ----------
@@ -49,7 +49,7 @@ asus rog;90;322/336;barst,gebarsten,strepen,lijnen,waterschade;defect
 monitor zonder voet;50;322/336;barst,gebarsten,strepen,lijnen,waterschade
 monitor zonder adapter;40;322/336;barst,gebarsten,strepen,lijnen,waterschade
 
-# ---------- MONITORS: working but underpriced (also for your own 4K 144Hz) ----------
+# ---------- MONITORS: working but underpriced ----------
 4k 144hz monitor;150;322/336;barst,gebarsten,strepen,lijnen,waterschade
 gigabyte m28u;150;322/336;barst,gebarsten,strepen,lijnen,waterschade
 1440p 144hz monitor;80;322/336;barst,gebarsten,strepen,lijnen,waterschade
@@ -63,12 +63,12 @@ game pc;150;322/328;waterschade;defect
 gaming laptop;150;322/339;waterschade,barst,gebarsten,moederbord;defect
 laptop start niet op;80;322/339;waterschade,barst,gebarsten;defect
 
-# ---------- PCs: niche (working, just missing a part) ----------
+# ---------- PCs: niche (working) ----------
 pc zonder voeding;80;322/328;waterschade
 pc zonder ssd;100;322/328;waterschade
 gaming pc moet weg;150;322/328;waterschade
 
-# ---------- Mini PCs (24/7 bot server + easy flips) ----------
+# ---------- Mini PCs (24/7 bot server) ----------
 lenovo tiny;80;322/328;waterschade
 optiplex micro;80;322/328;waterschade
 elitedesk mini;80;322/328;waterschade
@@ -83,7 +83,7 @@ rtx 3060;110;322/353;waterschade
 rtx 3070;140;322/353;waterschade
 rx 6600;90;322/353;waterschade
 
-# ---------- RAM / SSD / board (prices are high, so flip the cheap ones) ----------
+# ---------- RAM / SSD / board  ----------
 ddr4 32gb;75;322/331;waterschade
 ddr4 16gb;35;322/331;waterschade
 ram partij;60;322/331;waterschade,server,ecc,registered,servergeheugen,12800r,pc3l
@@ -106,6 +106,6 @@ galaxy a54;50;820/841;waterschade;defect
 galaxy a35;45;820/841;waterschade;defect
 galaxy a53;35;820/841;waterschade;defect
 
-# ---------- Switched off (no car, or beyond your current skills) ----------
+# ---------- Switched off  ----------
 # tv geen beeld wel geluid;60;31;waterschade;defect
 # joycon drift;8;356;;defect
