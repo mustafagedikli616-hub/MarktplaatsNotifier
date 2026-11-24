@@ -422,6 +422,7 @@ async Task HandleAddStep(string text)
     }
     else if (addStep == "search")
     {
+        await StartAdd(text);
     }
     else if (addStep == "price")
     {
