@@ -562,6 +562,18 @@ async Task<bool> TrySend(Listing ad, string search, string forcedAlert = "")
     {
         return false;
     }
+   
+    int wantedCategory = searchList.SubCategories[search];
+    if (wantedCategory != 0 && ad.CategoryId != wantedCategory)
+    {
+        return false;
+    }
+
+
+    if (forcedAlert == "" && seenIds.Contains(ad.Id))
+    {
+        return false;
+    }
 
     int maxPrice = searchList.Prices[search];
 

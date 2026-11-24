@@ -47,7 +47,7 @@ public class Telegram
         {
             int difference = (int)Math.Round((ad.Price - ad.TypicalPrice) / ad.TypicalPrice * 100);
             string compared = difference <= 0 ? $"{-difference}% under" : $"{difference}% over";
-            message += $"📊 Typical €{ad.TypicalPrice} ({ad.TypicalCount} listings) · {compared}\n";
+            message += $"📊 Typical €{ad.TypicalPrice} ({ad.TypicalCount} similar listings) · {compared}\n";
         }
         if (ad.RepostInfo != "") { message += $"🔁 {ad.RepostInfo}\n"; }
 
