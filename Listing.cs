@@ -66,6 +66,8 @@ public class Listing
     public string CategoryName { get; set; } = "";
     
     public string FaultReason { get; set; } = "";
+    
+    public string ScamWarning { get; set; } = "";
 
     public static Listing FromJson(JsonElement json)
     {
@@ -193,4 +195,5 @@ public class Listing
 
         return ad;
     }
+    
 }

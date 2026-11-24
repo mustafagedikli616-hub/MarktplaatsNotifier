@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 
 
 public static class Filters
@@ -30,6 +31,11 @@ public static class Filters
     {
         int hour = DateTime.Now.Hour;
         return hour >= 23 || hour < 7;
+    }
+    public static bool IsEvening()
+    {
+        int hour = DateTime.Now.Hour;
+        return hour >= 17 && hour < 23;
     }
     
     public static bool IsSuperDeal(Listing ad, int maxPrice)
@@ -88,7 +94,7 @@ public static class Filters
 
         return true;
     }
-        private static string[] faultWords =
+    private static string[] faultWords =
     {
         "defect", "defecte", "kapot", "kapotte", "is stuk", "gaat stuk", "werkt niet", "niet werkend",
         "doet het niet", "doet niks", "doet niets", "doet helemaal niks",
@@ -162,5 +168,95 @@ public static class Filters
         }
 
         return false;
+    }
+    private static string[] oldCpuWords =
+    {
+        "celeron", "pentium", "atom", "core 2 duo", "core2duo", "core 2 quad"
+    };
+
+    private static Regex oldIntelCpu = new Regex(@"\bi[3579][- ]?[2-6]\d{3}[a-z]{0,2}\b");
+    private static Regex oldAmdCpu = new Regex(@"\b(a4|a6|a8|a9|a10|a12|e1|e2)[- ]\d{4}");
+
+    public static string FindOldCpu(Listing ad)
+    {
+        string text = (ad.Title + " " + ad.Description).ToLower();
+
+        foreach (string word in oldCpuWords)
+        {
+            if (text.Contains(word))
+            {
+                return word;
+            }
+        }
+
+        Match intel = oldIntelCpu.Match(text);
+        if (intel.Success)
+        {
+            return intel.Value;
+        }
+
+        Match amd = oldAmdCpu.Match(text);
+        if (amd.Success)
+        {
+            return amd.Value;
+        }
+
+        return "";
+    }
+    private static string[] payOutsideWords =
+    {
+        "tikkie", "betaalverzoek", "overmaken", "bankoverschrijving", "vooruitbetalen", "vooruit betalen",
+        "alleen ideal", "niet via marktplaats", "buiten marktplaats", "paypal vrienden", "paypal friends"
+    };
+
+    private static string[] contactOutsideWords = { "whatsapp", "telegram", "bel me", "app me", "sms me" };
+
+    public static string FindScamSigns(Listing ad, bool defectSearch)
+    {
+        string text = (ad.Title + " " + ad.Description).ToLower();
+        List<string> strong = new List<string>();
+        List<string> weak = new List<string>();
+
+        foreach (string word in payOutsideWords)
+        {
+            if (text.Contains(word))
+            {
+                strong.Add($"wants payment outside Marktplaats (\"{word}\")");
+                break;
+            }
+        }
+
+        foreach (string word in contactOutsideWords)
+        {
+            if (text.Contains(word))
+            {
+                weak.Add($"wants contact outside the chat (\"{word}\")");
+                break;
+            }
+        }
+
+        if (ad.SellerYears == 0)
+        {
+            weak.Add("new account");
+        }
+
+        if (ad.PhotoCount <= 1)
+        {
+            weak.Add("only 1 photo");
+        }
+
+        bool looksWorking = !defectSearch && ad.FaultReason == "";
+        if (looksWorking && ad.Price > 0 && ad.TypicalPrice > 0 && ad.Price <= ad.TypicalPrice * 0.4)
+        {
+            weak.Add("working item, way too cheap");
+        }
+
+        if (strong.Count > 0 || weak.Count >= 2)
+        {
+            strong.AddRange(weak);
+            return string.Join(" · ", strong);
+        }
+
+        return "";
     }
 }

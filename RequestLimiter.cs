@@ -7,6 +7,7 @@ public class RequestLimiter
 
     private Random random = new Random();
     private DateTime calmUntil = DateTime.MinValue;
+    private int successesSinceSave = 0;
 
     public int DelayMs { get; private set; } = 3000;
 
@@ -29,6 +30,11 @@ public class RequestLimiter
         }
 
         DelayMs = Math.Max(MinDelayMs, (int)(DelayMs * 0.97));
+        successesSinceSave++;
+        if (successesSinceSave >= 25)
+        {
+            Save();
+        }
     }
 
     
@@ -38,5 +44,21 @@ public class RequestLimiter
         PausedUntil = DateTime.Now.AddMinutes(3);
         calmUntil = DateTime.Now.AddMinutes(15);
         Console.WriteLine($"Blocked: pausing 3 minutes, then {DelayMs} ms between requests");
+        Save();
+        
+    }
+    public void Load()
+    {
+        if (File.Exists("limiter.txt") && int.TryParse(File.ReadAllText("limiter.txt").Trim(), out int saved))
+        {
+            DelayMs = Math.Clamp(saved, MinDelayMs, MaxDelayMs);
+            Console.WriteLine($"Starting with the learned speed: {DelayMs} ms between requests");
+        }
+    }
+
+    public void Save()
+    {
+        successesSinceSave = 0;
+        File.WriteAllText("limiter.txt", DelayMs.ToString());
     }
 }

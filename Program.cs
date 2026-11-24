@@ -19,7 +19,9 @@ void StopWithError(string message)
     Environment.Exit(1);
 }
 
-HttpClient client = new HttpClient();
+HttpClientHandler handler = new HttpClientHandler();
+handler.AutomaticDecompression = System.Net.DecompressionMethods.All;
+HttpClient client = new HttpClient(handler);
 client.DefaultRequestHeaders.Add("User-Agent",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36");
 client.DefaultRequestHeaders.Add("Accept", "application/json, text/plain, */*");
@@ -152,17 +154,23 @@ if (File.Exists("seen.txt"))
 
 long lastUpdateId = 0;
 RequestLimiter limiter = new RequestLimiter();
+limiter.Load();
 SearchScheduler scheduler = new SearchScheduler();
 bool paused = false;
 DateTime skipDetailsUntil = DateTime.MinValue;
 DateTime startedAt = DateTime.Now;
 int checksDone = 0;
 int listingsSent = 0;
-
-
+Queue<DateTime> recentRequests = new Queue<DateTime>();
+int blocksToday = 0;
+DateTime blocksDay = DateTime.Today;
+double sentDelayTotal = 0;
+int sentDelayCount = 0;
 string addStep = "";
 string pendingSearch = "";
 int pendingPrice = 0;
+string pendingCategory = "";
+string pendingSubcategory = "";
 
 
 Dictionary<string, string> categoryButtons = new Dictionary<string, string>
@@ -185,6 +193,8 @@ try
     {
         new { command = "add", description = "Add a search" },
         new { command = "list", description = "Show your searches" },
+        new { command = "edit", description = "Change a max price" },
+        new { command = "groups", description = "Switch groups on/off" },
         new { command = "remove", description = "Remove a search" },
         new { command = "cancel", description = "Stop adding a search" },
         new { command = "pause", description = "Pause searching" },
@@ -211,6 +221,64 @@ catch (Exception ex)
 }
 
 List<string> labels = categoryButtons.Keys.ToList();
+Dictionary<string, Dictionary<string, string>> subcategoryButtons = new Dictionary<string, Dictionary<string, string>>
+{
+    {
+        "322", new Dictionary<string, string>
+        {
+            { "🖥️ Monitoren", "336" }, { "💻 Windows laptops", "339" }, { "🖥️ Desktop pc's", "328" },
+            { "🎮 Videokaarten", "353" }, { "🧠 RAM", "331" }, { "🔌 Moederborden", "335" },
+            { "⚡ Voedingen", "3019" }, { "📦 Behuizingen", "326" }, { "❄️ Koelers", "3018" },
+            { "➖ No subcategory", "" }
+        }
+    },
+    {
+        "356", new Dictionary<string, string>
+        {
+            { "🎮 PS5 consoles", "2954" }, { "🎮 PS4 consoles", "2894" }, { "🕹️ PS controllers", "2801" },
+            { "💿 PS5 games", "2952" }, { "🟩 Xbox Series X/S", "2955" }, { "🟩 Xbox One", "2896" },
+            { "➖ No subcategory", "" }
+        }
+    },
+    {
+        "820", new Dictionary<string, string>
+        {
+            { "📱 Samsung", "841" }, { "🔧 Phone parts", "1959" }, { "➖ No subcategory", "" }
+        }
+    }
+};
+
+Dictionary<string, string> flagButtons = new Dictionary<string, string>
+{
+    { "🚨 Urgent", "urgent" },
+    { "🛠️ Only broken", "defect" },
+    { "🚨🛠️ Both", "urgent,defect" },
+    { "➖ Nothing special", "" }
+};
+
+string MakeReplyKeyboard(List<string> buttonLabels)
+{
+    List<List<object>> keyboardRows = new List<List<object>>();
+    for (int i = 0; i < buttonLabels.Count; i += 2)
+    {
+        List<object> keyboardRow = new List<object> { new { text = buttonLabels[i] } };
+        if (i + 1 < buttonLabels.Count)
+        {
+            keyboardRow.Add(new { text = buttonLabels[i + 1] });
+        }
+
+        keyboardRows.Add(keyboardRow);
+    }
+
+    return JsonSerializer.Serialize(new { keyboard = keyboardRows, one_time_keyboard = true, resize_keyboard = true });
+}
+
+string SubcategoryKeyboard(string category)
+{
+    return MakeReplyKeyboard(subcategoryButtons[category].Keys.ToList());
+}
+
+string flagsKeyboard = MakeReplyKeyboard(flagButtons.Keys.ToList());
 List<List<object>> rows = new List<List<object>>();
 for (int i = 0; i < labels.Count; i += 2)
 {
@@ -227,6 +295,103 @@ for (int i = 0; i < labels.Count; i += 2)
 string categoryKeyboard =
     JsonSerializer.Serialize(new { keyboard = rows, one_time_keyboard = true, resize_keyboard = true });
 string removeKeyboard = "{\"remove_keyboard\":true}";
+string ListKeyboard()
+{
+    List<List<object>> buttonRows = new List<List<object>>();
+    List<object> row = new List<object>();
+    foreach (string searchText in searchList.Prices.Keys)
+    {
+        string data = "s:" + searchText;
+        if (System.Text.Encoding.UTF8.GetByteCount(data) > 64)
+        {
+            continue;
+        }
+
+        string label = searchList.UrgentSearches.Contains(searchText) ? "🚨 " + searchText : searchText;
+        row.Add(new { text = label, callback_data = data });
+        if (row.Count == 2)
+        {
+            buttonRows.Add(row);
+            row = new List<object>();
+        }
+    }
+
+    if (row.Count > 0)
+    {
+        buttonRows.Add(row);
+    }
+
+    return JsonSerializer.Serialize(new { inline_keyboard = buttonRows });
+}
+
+string SearchKeyboard(string searchText)
+{
+    var buttonRows = new List<List<object>>
+    {
+        new List<object>
+        {
+            new { text = "💶 Price", callback_data = "p:" + searchText },
+            new { text = "🚨 Urgent", callback_data = "u:" + searchText }
+        },
+        new List<object>
+        {
+            new { text = "🛠️ Only broken", callback_data = "d:" + searchText },
+            new { text = "🗑️ Remove", callback_data = "r:" + searchText }
+        }
+    };
+    return JsonSerializer.Serialize(new { inline_keyboard = buttonRows });
+}
+
+async Task HandleButton(string data)
+{
+    if (data.Length < 3)
+    {
+        return;
+    }
+
+    string action = data.Substring(0, 2);
+    string searchText = data.Substring(2);
+    
+    if (action == "g:")
+    {
+        var groups = searchList.Groups();
+        if (int.TryParse(searchText, out int groupIndex) && groupIndex < groups.Count)
+        {
+            await telegram.SendText(searchList.ToggleGroup(groups[groupIndex].Name));
+            await telegram.SendText($"🗂️ Groups ({searchList.Prices.Count} searches on):", GroupsKeyboard());
+        }
+
+        return;
+    }
+    if (!searchList.Prices.ContainsKey(searchText))
+    {
+        await telegram.SendText($"❌ \"{searchText}\" is not in your list anymore.");
+        return;
+    }
+
+    if (action == "s:")
+    {
+        await telegram.SendText(searchList.DetailsText(searchText), SearchKeyboard(searchText));
+    }
+    else if (action == "p:")
+    {
+        pendingSearch = searchText;
+        addStep = "editprice";
+        await telegram.SendText($"💶 New max price for \"{searchText}\"? (now €{searchList.Prices[searchText]}, or /cancel)");
+    }
+    else if (action == "u:")
+    {
+        await telegram.SendText(searchList.ToggleUrgent(searchText));
+    }
+    else if (action == "d:")
+    {
+        await telegram.SendText(searchList.ToggleDefect(searchText));
+    }
+    else if (action == "r:")
+    {
+        await telegram.SendText(searchList.Remove(searchText));
+    }
+}
 
 async Task StartAdd(string searchText)
 {
@@ -244,9 +409,19 @@ async Task StartAdd(string searchText)
 
 async Task HandleAddStep(string text)
 {
-    if (addStep == "search")
+    if (addStep == "editprice")
     {
-        await StartAdd(text);
+        if (!int.TryParse(text.Replace("€", "").Trim(), out int newPrice))
+        {
+            await telegram.SendText("❌ Send just a number, like 140. (or /cancel)");
+            return;
+        }
+
+        addStep = "";
+        await telegram.SendText(searchList.SetPrice(pendingSearch, newPrice));
+    }
+    else if (addStep == "search")
+    {
     }
     else if (addStep == "price")
     {
@@ -279,11 +454,55 @@ async Task HandleAddStep(string text)
             return;
         }
 
-        string line = $"{pendingSearch};{pendingPrice}";
-        if (category != "")
+        pendingCategory = category;
+        if (subcategoryButtons.ContainsKey(category))
         {
-            line += $";{category}";
+            addStep = "subcategory";
+            await telegram.SendText("📁 Which subcategory? (or /cancel)", SubcategoryKeyboard(category));
         }
+        else
+        {
+            pendingSubcategory = "";
+            addStep = "flags";
+            await telegram.SendText("⚙️ Anything special? (or /cancel)", flagsKeyboard);
+        }
+    }
+    else if (addStep == "subcategory")
+    {
+        Dictionary<string, string> choices = subcategoryButtons[pendingCategory];
+        if (choices.ContainsKey(text))
+        {
+            pendingSubcategory = choices[text];
+        }
+        else if (int.TryParse(text, out _))
+        {
+            pendingSubcategory = text;
+        }
+        else
+        {
+            await telegram.SendText("❌ Tap one of the buttons, or send a subcategory number. (or /cancel)",
+                SubcategoryKeyboard(pendingCategory));
+            return;
+        }
+
+        addStep = "flags";
+        await telegram.SendText("⚙️ Anything special? (or /cancel)", flagsKeyboard);
+    }
+    else if (addStep == "flags")
+    {
+        if (!flagButtons.ContainsKey(text))
+        {
+            await telegram.SendText("❌ Tap one of the buttons. (or /cancel)", flagsKeyboard);
+            return;
+        }
+
+        string line = $"{pendingSearch};{pendingPrice};{pendingCategory}";
+        if (pendingSubcategory != "")
+        {
+            line += $"/{pendingSubcategory}";
+        }
+
+        line += $";;{flagButtons[text]}";
 
         addStep = "";
         await telegram.SendText(searchList.Add(line), removeKeyboard);
@@ -295,7 +514,9 @@ string helpText = "🤖 Commands:\n\n" +
                   "/add - add a search, the bot asks you the price and category\n" +
                   "   quick version: /add rtx 3070;140;322\n\n" +
                   "/remove search\n   example: /remove rtx 3070\n\n" +
-                  "/list - show all your searches\n" +
+                  "/list - show your searches, tap one to change it\n" +
+                  "/edit search;price - change a max price\n" +
+                  "/groups - switch groups of searches on/off\n" +
                   "/cancel - stop adding a search\n" +
                   "/pause - pause searching\n" +
                   "/resume - start searching again\n" +
@@ -322,6 +543,18 @@ async Task CheckCommands()
         foreach (JsonElement update in updates.RootElement.GetProperty("result").EnumerateArray())
         {
             lastUpdateId = update.GetProperty("update_id").GetInt64();
+            
+            if (update.TryGetProperty("callback_query", out JsonElement button))
+            {
+                string buttonChat = button.GetProperty("message").GetProperty("chat").GetProperty("id").GetInt64().ToString();
+                if (buttonChat == chatId)
+                {
+                    await telegram.AnswerButton(button.GetProperty("id").GetString());
+                    await HandleButton(button.GetProperty("data").GetString());
+                }
+
+                continue;
+            }
 
             if (!update.TryGetProperty("message", out JsonElement msg))
             {
@@ -385,7 +618,24 @@ async Task CheckCommands()
             }
             else if (text == "/list")
             {
-                await telegram.SendText(searchList.ListText());
+                await telegram.SendText($"📋 Your searches ({searchList.Prices.Count}). Tap one to change it:", ListKeyboard());
+            }
+            else if (text == "/groups")
+            {
+                await telegram.SendText($"🗂️ Groups ({searchList.Prices.Count} searches on). Tap one to switch it on/off:",
+                    GroupsKeyboard());
+            }
+            else if (text.StartsWith("/edit "))
+            {
+                string[] editParts = text.Substring(6).Split(';');
+                if (editParts.Length == 2 && int.TryParse(editParts[1].Trim(), out int editPrice))
+                {
+                    await telegram.SendText(searchList.SetPrice(editParts[0].Trim(), editPrice));
+                }
+                else
+                {
+                    await telegram.SendText("Use: /edit search;new price\nExample: /edit rtx 3070;150");
+                }
             }
             else if (text == "/pause")
             {
@@ -400,13 +650,23 @@ async Task CheckCommands()
             else if (text == "/status")
             {
                 TimeSpan running = DateTime.Now - startedAt;
+                List<string> hot = scheduler.HotSearches(3);
+                string hotText = hot.Count > 0 ? string.Join(", ", hot) : "nothing yet";
+                string speed = "no data yet";
+                if (sentDelayCount > 0)
+                {
+                    speed = $"{sentDelayTotal / sentDelayCount:0.0} min on average ({sentDelayCount} listings)";
+                }
                 string state = paused ? "⏸️ paused" : "▶️ running";
                 await telegram.SendText(
                     $"🤖 Status: {state}\n" +
                     $"⏱️ Running for {(int)running.TotalHours} h {running.Minutes} min\n" +
                     $"🔎 {searchList.Prices.Count} searches, {checksDone} checks done\n" +
                     $"📨 {listingsSent} listings sent\n" +
-                    $"🐢 {limiter.DelayMs} ms between requests");
+                    $"🐢 {limiter.DelayMs} ms between requests\n" +
+                    $"⚡ Posted → sent: {speed}\n" +
+                    $"🚫 403s today: {BlocksToday()} · {RequestsLastMinute()} requests in the last minute\n" +
+                    $"🔥 Hot right now: {hotText}");
             }
             else if (text == "/help" || text == "/start")
             {
@@ -421,6 +681,40 @@ async Task CheckCommands()
 }
 
 int errorsInARow = 0;
+int RequestsLastMinute()
+{
+    while (recentRequests.Count > 0 && recentRequests.Peek() < DateTime.Now.AddMinutes(-1))
+    {
+        recentRequests.Dequeue();
+    }
+
+    return recentRequests.Count;
+}
+
+void CountRequest()
+{
+    recentRequests.Enqueue(DateTime.Now);
+}
+
+int BlocksToday()
+{
+    if (DateTime.Today != blocksDay)
+    {
+        blocksDay = DateTime.Today;
+        blocksToday = 0;
+    }
+
+    return blocksToday;
+}
+
+void LogBlock(string what)
+{
+    BlocksToday();
+    blocksToday++;
+    string line = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} | {what} | {RequestsLastMinute()} requests in the last minute | delay was {limiter.DelayMs} ms";
+    Console.WriteLine("🚫 403: " + line);
+    File.AppendAllText("blocks.txt", line + "\n");
+}
 
 bool IsNew(string itemId)
 {
@@ -439,6 +733,7 @@ Dictionary<int, string> categoryNames = new Dictionary<int, string>();
 
 async Task<List<Listing>> FetchListings(string url)
 {
+    CountRequest();
     string json = await client.GetStringAsync(url);
     if (errorsInARow >= 5)
     {
@@ -504,6 +799,7 @@ async Task AddPageDetails(Listing ad)
 
     try
     {
+        CountRequest();
         string html = await client.GetStringAsync("https://www.marktplaats.nl" + ad.Link);
 
         string stats = FindInText(html, """stats":\{([^}]*)\}""");
@@ -559,6 +855,7 @@ async Task AddPageDetails(Listing ad)
             (httpError.StatusCode == System.Net.HttpStatusCode.TooManyRequests ||
              httpError.StatusCode == System.Net.HttpStatusCode.Forbidden))
         {
+            LogBlock("listing page: " + ad.Title);
             skipDetailsUntil = DateTime.Now.AddMinutes(30);
             Console.WriteLine("Listing pages are blocked: skipping extra info for 30 minutes.");
         }
@@ -586,6 +883,15 @@ async Task<bool> TrySend(Listing ad, string search, string forcedAlert = "")
     if (Filters.IsNotForSale(ad.Title))
     {
         return false;
+    }
+    if (ad.CategoryId == 339 || ad.CategoryId == 328)
+    {
+        string oldCpu = Filters.FindOldCpu(ad);
+        if (oldCpu != "")
+        {
+            Console.WriteLine($"Skipped (old CPU {oldCpu}): {ad.Title}");
+            return false;
+        }
     }
 
     string badWord = Filters.FindBadFault(ad.Title + ". " + ad.Description, searchList.SkipWords[search]);
@@ -630,6 +936,15 @@ async Task<bool> TrySend(Listing ad, string search, string forcedAlert = "")
         Console.WriteLine($"Skipped ({lateBadWord}, in full description): {ad.Title}");
         return false;
     }
+    if (ad.CategoryId == 339 || ad.CategoryId == 328)
+    {
+        string oldCpu = Filters.FindOldCpu(ad);
+        if (oldCpu != "")
+        {
+            Console.WriteLine($"Skipped (old CPU {oldCpu}): {ad.Title}");
+            return false;
+        }
+    }
     if (ad.Price > 0)
     {
         ad.TypicalPrice = history.TypicalPrice(search, ad.CategoryId, out int count);
@@ -653,7 +968,7 @@ async Task<bool> TrySend(Listing ad, string search, string forcedAlert = "")
             return false;
         }
     }
-
+    ad.ScamWarning = Filters.FindScamSigns(ad, searchList.DefectSearches.Contains(search));
     if (ad.SellerType == "TRADER")
     {
         Console.WriteLine($"Skipped (business): {ad.Title}");
@@ -686,11 +1001,30 @@ async Task<bool> TrySend(Listing ad, string search, string forcedAlert = "")
     await telegram.SendListing(ad, Filters.IsNight(), alert);
     await Task.Delay(1000);
     listingsSent++;
+    if (forcedAlert == "" && ad.PostedAt != DateTime.MinValue)
+    {
+        double minutes = (DateTime.Now - ad.PostedAt).TotalMinutes;
+        sentDelayTotal += minutes;
+        sentDelayCount++;
+        Console.WriteLine($"Posted → sent: {minutes:0.0} min");
+    }
     Console.WriteLine($"Sent ({search}): {ad.Title}");
     Console.WriteLine();
     return true;
 }
+string GroupsKeyboard()
+{
+    List<List<object>> buttonRows = new List<List<object>>();
+    var groups = searchList.Groups();
+    for (int i = 0; i < groups.Count; i++)
+    {
+        string icon = groups[i].Active > 0 ? "✅" : "⏸️";
+        int total = groups[i].Active + groups[i].Off;
+        buttonRows.Add(new List<object> { new { text = $"{icon} {groups[i].Name} ({total})", callback_data = $"g:{i}" } });
+    }
 
+    return JsonSerializer.Serialize(new { inline_keyboard = buttonRows });
+}
 async Task HandleError(string what, Exception ex)
 {
     {
@@ -712,6 +1046,7 @@ async Task HandleError(string what, Exception ex)
             (httpError.StatusCode == System.Net.HttpStatusCode.TooManyRequests ||
              httpError.StatusCode == System.Net.HttpStatusCode.Forbidden))
         {
+            LogBlock("search: " + what);            
             limiter.Blocked();
         }
     }
@@ -747,7 +1082,7 @@ while (true)
     }
 
 
-    string search = scheduler.NextDue(searchList.Prices.Keys);
+    string search = scheduler.NextDue(searchList.Prices.Keys, searchList.UrgentSearches);
     if (search == "")
     {
         await CheckCommands();
@@ -814,6 +1149,6 @@ while (true)
         await HandleError(search, ex);
     }
 
-    scheduler.Done(search, foundNew, searchList.UrgentSearches.Contains(search), Filters.IsNight());
+    scheduler.Done(search, foundNew, searchList.UrgentSearches.Contains(search), Filters.IsNight(), Filters.IsEvening());
     await WaitAndListen(limiter.NextWaitMs());
 }

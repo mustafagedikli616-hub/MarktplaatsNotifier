@@ -25,6 +25,11 @@ public class Telegram
 
         await client.GetStringAsync(url);
     }
+    public async Task AnswerButton(string callbackId)
+    {
+        await client.GetStringAsync(
+            $"https://api.telegram.org/bot{token}/answerCallbackQuery?callback_query_id={Uri.EscapeDataString(callbackId)}");
+    }
 
     public async Task SendListing(Listing ad, bool night, string alert)
     {
@@ -51,6 +56,7 @@ public class Telegram
         }
         if (ad.RepostInfo != "") { message += $"🔁 {ad.RepostInfo}\n"; }
         if (ad.FaultReason != "") { message += $"{ad.FaultReason}\n"; }
+        if (ad.ScamWarning != "") { message += $"⚠️ <b>Scam check:</b> {System.Net.WebUtility.HtmlEncode(ad.ScamWarning)}\n"; }
         message += $"📍 {place}";
         if (ad.Delivery != "") { message += $" · 📦 {ad.Delivery}"; }
         message += "\n";

@@ -18,6 +18,8 @@ publish/
 hints.txt
 history.txt
 newest.txt
+blocks.txt
+limiter.txt
 
 # Backups
 *.bak
