@@ -6,8 +6,6 @@
 
 A C# console app that watches [Marktplaats.nl](https://www.marktplaats.nl) searches and sends new listings straight to your phone via Telegram, usually within about a minute of being posted. Much faster than Marktplaats' own saved searches.
 
-I built this to catch cheap broken monitors, PCs and PC parts to repair and resell, before anyone else sees them.
-
 <p align="center">
   <img src="docs/screenshot.png" alt="Telegram notifications from the bot" width="320">
 </p>
@@ -53,7 +51,7 @@ I built this to catch cheap broken monitors, PCs and PC parts to repair and rese
 
 ## Setup
 
-👉 **Not a programmer?** Follow the step-by-step [**Setup guide**](SETUP.md). No coding needed.
+**Not a programmer?** Follow the step-by-step [**Setup guide**](SETUP.md). No coding needed.
 
 **For developers:** you need .NET 6 or newer. Clone the repo and run:
 
@@ -61,7 +59,7 @@ I built this to catch cheap broken monitors, PCs and PC parts to repair and rese
 dotnet run
 ```
 
-On the first launch, the app asks for your Telegram bot token, finds your chat ID by itself, and asks for your postcode and how far you'll travel for pickup. Everything is saved to `secrets.txt`, which is in `.gitignore`, so your token and postcode never end up on GitHub.
+On the first launch, the app asks for your Telegram bot token, finds your chat ID by itself, and asks for your postcode and how far you'll travel for pickup.
 
 ## Changing the searches
 
@@ -101,7 +99,7 @@ Common category IDs: `322` = Computers en Software, `356` = Spelcomputers en Gam
 
 ## Roadmap
 
-### ✅ Done
+###  Done
 - [x] Limit searches to specific Marktplaats categories
 - [x] Allow pickup-only listings near my own city
 - [x] Manage searches from Telegram (`/add`, `/remove`, `/list`)
@@ -131,19 +129,11 @@ Common category IDs: `322` = Computers en Software, `356` = Spelcomputers en Gam
 - [ ] Ship a short example `searches.txt` instead of my own list
 - [ ] Mac and Linux release builds
 
-### 5. Features nobody else has
+### 5. Features that sound interesting
 - [ ] Seller info in the message (years on Marktplaats, reviews, verified ✓)
 - [ ] Price drop alerts ("📉 €80 → €45")
 - [ ] Repair hints: `hints.txt` with rules like `geen beeld,geluid;💡 often backlight`, plus a question to ask the seller
 - [ ] Separate Telegram group with a loud custom sound for super deals
-
-### 6. Big future plan: AI deal assistant
-- [ ] Claude reads the title, description and photos of listings that pass the filters
-- [ ] Verdict in the message: good deal or skip, likely fault, resale value, max bid
-- [ ] A ready-to-copy message to the seller (Dutch)
-- [ ] Forward a seller's reply to the bot and get a suggested answer
-- [ ] Daily limit on AI calls to keep costs low
-- Messages are never sent to sellers automatically: Marktplaats doesn't allow bots to message, and it would put the account at risk. The bot drafts, you send.
 
 ## Note
 
