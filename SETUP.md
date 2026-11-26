@@ -1,123 +1,99 @@
-# 📱 Setup guide
+# Setup guide
 
-No programming knowledge needed. This takes about 5 minutes.
+No programming needed. Takes about 5 minutes.
 
 ## What you need
 
 - **Telegram** on your phone ([iPhone](https://apps.apple.com/app/telegram-messenger/id686449807) / [Android](https://play.google.com/store/apps/details?id=org.telegram.messenger))
-- A computer that stays on while you want notifications
+- A PC or Mini PC that stays on while you want alerts
 
 ---
 
-## Step 1: Create your own Telegram bot
+## Step 1: Make a Telegram bot
 
-The notifications come from your own private bot. Telegram's official **BotFather** makes one for you.
+Notifications come from your own private bot. Telegram's **@BotFather** creates one for you.
 
-1. Open Telegram and search for **@BotFather**. Pick the one with the **blue checkmark** ✔️. Others are fakes.
+1. Open Telegram and search for **@BotFather** (the one with the blue checkmark).
 
    ![Searching for BotFather](docs/setup/1-search-botfather.png)
 
-2. Tap **Start**, then send:
-   ```
-   /newbot
-   ```
-
-3. BotFather asks for a **name**. This is what you'll see in your chat list, e.g. `My Marktplaats Alerts`.
-
-4. Then it asks for a **username**. It has to end with `bot` and be unique, e.g. `jan_marktplaats_bot`.
+2. Tap **Start**, then send `/newbot`.
+3. Pick a **name** (e.g. `My Marktplaats Alerts`) and a **username** ending in `bot` (e.g. `jan_marktplaats_bot`).
 
    ![Choosing a name and username](docs/setup/2-newbot.png)
 
-5. BotFather now sends you a **token**: a long code like `123456789:ABCdef...`. Copy it. You'll need it in step 3.
+4. BotFather gives you a **token** like `123456789:ABCdef...`. Copy it.
 
    ![The token message](docs/setup/3-token.png)
 
-> ⚠️ **Keep your token secret.** Anyone who has it can control your bot. If you ever leak it, send `/revoke` to BotFather to get a new one.
+> Keep your token private. Anyone with it can control your bot. If you ever leak it, send `/revoke` to BotFather.
 
 ---
 
-## Step 2: Download the app
+## Step 2: Download and run
 
-1. Go to the [**Releases**](../../releases) page of this project.
-2. Download the file for your computer (e.g. `MarktplaatsNotifier-windows.zip`) and **unzip** it into a folder.
-
-**Windows:** the first time you open it, you may see a blue **"Windows protected your PC"** screen. That's because the app isn't signed (signing costs money), not because it's dangerous. Click **More info → Run anyway**.
-
----
-
-## Step 3: First launch
-
-1. Double-click **MarktplaatsNotifier**. A black window opens.
-2. It asks for your token. **Paste** it (right-click in the window) and press **Enter**.
-3. It asks you to message your bot. Open your new bot in Telegram (BotFather sent you a link to it), tap **Start** or send `hi`.
+1. Download the latest zip from the [**Releases**](../../releases) page and unzip it into a folder.
+2. Double-click **MarktplaatsNotifier**.
+   - On Windows you may see a blue "Windows protected your PC" screen because the app isn't code-signed. Click **More info → Run anyway**.
+3. Paste your bot token and press **Enter**.
+4. Open your new bot in Telegram and send it any message (like `hi`).
 
    ![Sending the first message to your bot](docs/setup/4-message-bot.png)
 
-4. The window says **"Setup done!"**.
-5. It asks for your **postcode**, like `1234AB`. This is used to show how far away a listing is.
-6. It asks **how many km you'll travel** to pick something up. Listings that can't be shipped are only sent if they're within this distance. Type `0` if you only want listings that can be shipped.
+5. Enter your **postcode** (like `1234AB`) and **how many km** you're willing to drive for pickup (`0` = shipping only).
 
-That's it! 🎉 You won't be asked these questions again.
-
-The first round is quiet: the app remembers all current listings without sending them. From then on, you'll only get **new** listings.
+Done. You won't be asked again. The first check for each search is quiet so you don't get flooded with old listings.
 
 ![What the notifications look like](docs/screenshot.png)
 
 ---
 
-## Step 4: Choose what to search for
+## Step 3: Using the bot from your phone
 
-There are two ways:
+Send **`/menu`** in Telegram to open the button menu. From there you can do everything without touching any files:
 
-**A) From your phone (easiest):** send `/add` to your bot. It asks what to search for, your max price, and a category (tap a button). Use `/list` to see your searches and `/remove rtx 3070` to remove one. Send `/help` for all commands.
+- **Add a search**: tap **Add Search**, type something like `rtx 3070 under 140`, or paste a Marktplaats search URL straight into the chat.
+- **Edit or delete searches**: tap **Searches** (or **Find** to jump straight to one). Tap any search to change its max price, toggle Urgent, edit skip words, run a live **Check now**, or delete it.
+- **Watch a listing**: tap **Watch** under any listing the bot sends you, or use **Share → Telegram → your bot** from the Marktplaats app. You'll get an alert if the price drops, someone bids higher, or it gets reserved/sold.
+- **Settings**: change your postcode, pickup km, quiet night hours, language (English / Dutch), and business filters.
+- **Snooze**: pause alerts for 1 hour, 3 hours, or until tomorrow 08:00.
+- **Backup & Restore**: tap **Backup** to get a `.zip` file in Telegram. Send that `.zip` back to the bot anytime to restore everything.
 
-**B) In `searches.txt`:** open **`searches.txt`** (in the same folder as the app) with Notepad. Every line is one search:
+### Editing `searches.txt` directly (optional)
 
+If you prefer editing a file on your PC, open `searches.txt` in Notepad. Each line is:
+
+```text
+search words;max price;category;skip words;urgent
 ```
+
+Examples:
+
+```text
 defect monitor;60;322;barst,strepen,waterschade
 rtx 3060;110;322
-galaxy a36 defect;90;820;;urgent
+ps5 defect;120;356/2954;;urgent
 iphone 13;250
 ```
 
-Each line has up to **5 parts**, separated by **`;`**. Only the first two are required:
-
-1. **Search words**, like you'd type them on Marktplaats
-2. **Max price** in whole euros
-3. **Category number** (optional). `322` means "only search in Computers en Software". Leave it out to search all of Marktplaats. The most common numbers are at the top of `searches.txt`.
-4. **Skip words** (optional), separated by commas. A listing that mentions one of them is skipped. Example: `barst,waterschade` skips cracked or water-damaged items. "Geen waterschade" is *not* skipped.
-5. **`urgent`** (optional). Every new listing from this search makes a sound, even at night, with a 🚨 URGENT 🚨 header.
-
-Want part 5 but not part 4? Leave part 4 empty, so you get two `;` in a row: `galaxy a36 defect;90;820;;urgent`
-
-Save the file and restart the app. Made a typo? The app tells you which line is wrong.
-
-Lines starting with `#` are switched off. Put notes on their own `#` line, never behind a search.
+Save the file and the bot reloads it automatically within a couple seconds. Lines starting with `#` are ignored.
 
 ---
 
-## 🚨 Super deals and quiet nights
+## Quiet nights and alerts
 
-- A listing with a **fixed price** (not "Bieden") that costs **half of your max price or less** is a super deal. You get a 🚨 SUPER DEAL 🚨 message that always makes a sound.
-- Between **23:00 and 07:00**, normal listings arrive **silently** so they don't wake you. Super deals and urgent searches still make a sound.
-
----
-
-## Keep it running
-
-The app only checks while the black window is **open** and your computer is **awake**. Closing the window stops the notifications.
+- Fixed-price listings at or below **half** your max price get a loud **SUPER DEAL** alert.
+- Price drops and `urgent` searches also make a sound, even at night.
+- Between **23:00 and 07:00** (changeable in `/settings`), normal listings arrive silently, and you get a short morning summary at 07:00.
 
 ---
 
-## Something not working?
+## Troubleshooting
 
 | Problem | Fix |
 |---|---|
-| "That token doesn't work" | Copy the token from BotFather again, without spaces, and paste it. |
-| Nothing arrives | The first round is quiet. Wait a while, new listings don't appear every minute. |
-| "⚠️ 5 errors in a row" in Telegram | Marktplaats is blocking the bot for a moment, or your internet is down. The bot keeps trying by itself and sends ✅ when it works again. |
-| I moved, or want a different pickup distance | Open `secrets.txt` with Notepad. Line 3 is your postcode, line 4 the distance in km. Change them, save, and restart the app. |
-| I want to start over completely | Delete `secrets.txt` and `seen.txt`, then start the app. |
-| "Error with '...'" lines in the window | Usually a short internet hiccup. The app keeps going by itself. |
-| "Line ... in searches.txt is wrong" | Fix that line. The format is `search words;price;category;skip words;urgent`, and only the first two parts are required. Then start the app again. |
-| I'm not getting alerts at night | That's on purpose: normal listings are silent from 23:00 to 07:00. Add `urgent` to a search if you want those to make a sound. |
+| "That token doesn't work" | Copy the token from BotFather again with no extra spaces. |
+| Nothing arrives right away | The first check of each search is quiet. Send `/test` to check that alerts work, or open a search in `/list` and tap **Check now**. |
+| "5 errors in a row" in Telegram | Marktplaats is temporarily rate-limiting or your internet dropped. The bot slows down and keeps retrying on its own. |
+| Change postcode or pickup km | Send `/settings` in Telegram (or edit lines 3 and 4 of `secrets.txt`). |
+| Start over | Delete `secrets.txt` and `seen.txt`, then start the app again. |

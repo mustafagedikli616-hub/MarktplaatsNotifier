@@ -1,0 +1,2485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Marktplaats Notifier</title>
+<style>
+  :root {
+    --bg: #0c0e12;
+    --surface: #14171e;
+    --surface-2: #1b1f29;
+    --surface-3: #222734;
+    --border: #272d3a;
+    --border-strong: #374052;
+    --text: #eceff4;
+    --muted: #8b94a7;
+    --accent: #f59e0b;
+    --accent-hover: #fbbf24;
+    --accent-soft: rgba(245, 158, 11, 0.14);
+    --green: #22c55e;
+    --green-soft: rgba(34, 197, 94, 0.14);
+    --red: #ef4444;
+    --red-soft: rgba(239, 68, 68, 0.14);
+    --blue: #3b82f6;
+    --blue-soft: rgba(59, 130, 246, 0.14);
+    --purple: #a855f7;
+    --purple-soft: rgba(168, 85, 247, 0.14);
+    --radius: 10px;
+    --shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+    --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+  }
+
+  [data-theme="light"] {
+    --bg: #f3f4f6;
+    --surface: #ffffff;
+    --surface-2: #f8f9fb;
+    --surface-3: #eef0f4;
+    --border: #e2e6ee;
+    --border-strong: #cbd2df;
+    --text: #141720;
+    --muted: #5f687a;
+    --accent: #d97706;
+    --accent-hover: #b45309;
+    --accent-soft: rgba(217, 119, 6, 0.12);
+    --green: #16a34a;
+    --green-soft: rgba(22, 163, 74, 0.12);
+    --red: #dc2626;
+    --red-soft: rgba(220, 38, 38, 0.10);
+    --blue: #2563eb;
+    --blue-soft: rgba(37, 99, 235, 0.10);
+    --purple: #9333ea;
+    --purple-soft: rgba(147, 51, 234, 0.10);
+    --shadow: 0 8px 24px rgba(15, 23, 42, 0.10);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13.5px;
+    line-height: 1.45;
+    min-height: 100vh;
+  }
+
+  a { color: var(--text); text-decoration: none; }
+  a:hover { color: var(--accent); }
+  .link { color: var(--accent); }
+  .link:hover { text-decoration: underline; }
+
+  /* Header */
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .header-inner {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 11px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+    font-size: 15.5px;
+    letter-spacing: -0.015em;
+  }
+
+  .brand-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 0 3px var(--green-soft);
+    animation: pulse 2.4s infinite;
+  }
+  .brand-dot.paused {
+    background: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+    animation: none;
+  }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 3px var(--green-soft); }
+    50% { box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.05); }
+  }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex-wrap: wrap;
+  }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: 11.5px;
+    font-weight: 600;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .pill.live { color: var(--green); border-color: rgba(34,197,94,0.3); background: var(--green-soft); }
+  .pill.paused { color: var(--accent); border-color: rgba(245,158,11,0.3); background: var(--accent-soft); }
+  .pill.demo { color: var(--blue); border-color: rgba(59,130,246,0.3); background: var(--blue-soft); }
+
+  /* Tabs */
+  nav {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 0 20px;
+    display: flex;
+    gap: 2px;
+    overflow-x: auto;
+    border-top: 1px solid var(--border);
+  }
+  nav button {
+    background: none;
+    border: none;
+    color: var(--muted);
+    font: inherit;
+    font-weight: 500;
+    padding: 10px 14px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    transition: color 0.12s, border-color 0.12s;
+  }
+  nav button:hover { color: var(--text); }
+  nav button.active { color: var(--text); border-bottom-color: var(--accent); }
+
+  .tab-count {
+    font-size: 11px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-family: var(--mono);
+  }
+
+  /* Layout */
+  main {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 18px 20px 40px;
+  }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+  }
+  .stat-label { font-size: 11.5px; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+  .stat-value { font-size: 23px; font-weight: 700; font-family: var(--mono); letter-spacing: -0.025em; }
+  .stat-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+  .card-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .card-title { font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+  .card-body { padding: 15px 16px; }
+
+  .two-col { display: grid; grid-template-columns: 1.55fr 1fr; gap: 16px; align-items: start; }
+  .equal-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+
+  /* Buttons & Inputs */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text);
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s, color 0.12s;
+    white-space: nowrap;
+  }
+  .btn:hover { border-color: var(--border-strong); background: var(--surface-3); }
+  .btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #111;
+    font-weight: 600;
+  }
+  .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); color: #111; }
+  .btn-danger { color: var(--red); }
+  .btn-danger:hover { background: var(--red-soft); border-color: rgba(239,68,68,0.4); }
+  .btn-green { color: var(--green); border-color: rgba(34,197,94,0.3); background: var(--green-soft); }
+  .btn-sm { padding: 4px 9px; font-size: 12px; }
+  .btn-xs { padding: 3px 7px; font-size: 11.5px; border-radius: 5px; }
+  .btn-ghost { background: transparent; border-color: transparent; color: var(--muted); }
+  .btn-ghost:hover { color: var(--text); background: var(--surface-2); border-color: transparent; }
+
+  input[type="text"], input[type="number"], input[type="password"], select, textarea {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 7px;
+    padding: 7px 10px;
+    font: inherit;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.12s;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+  textarea { width: 100%; font-family: var(--mono); font-size: 12px; line-height: 1.5; resize: vertical; }
+
+  /* Segmented controls & filter chips */
+  .seg {
+    display: inline-flex;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 2px;
+  }
+  .seg button {
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    padding: 4px 10px;
+    font-size: 12px;
+    font-weight: 500;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+  .seg button.active { background: var(--surface-2); color: var(--text); }
+
+  .filter-bar {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+    align-items: center;
+  }
+  .filter-chip {
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .filter-chip:hover { color: var(--text); border-color: var(--border-strong); }
+  .filter-chip.active { background: var(--accent-soft); border-color: rgba(245,158,11,0.45); color: var(--accent); }
+
+  /* Skip breakdown bar */
+  .breakdown {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+  }
+  .breakdown-bar {
+    height: 6px;
+    border-radius: 999px;
+    overflow: hidden;
+    display: flex;
+    gap: 2px;
+    margin-bottom: 7px;
+    background: var(--bg);
+  }
+  .breakdown-legend {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    font-size: 11.5px;
+    color: var(--muted);
+  }
+  .legend-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    margin-right: 5px;
+  }
+
+  /* Rich Feed Cards */
+  .feed-item {
+    padding: 13px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 13px;
+    align-items: flex-start;
+    transition: background 0.1s;
+  }
+  .feed-item:last-child { border-bottom: none; }
+  .feed-item:hover { background: rgba(255,255,255,0.015); }
+  .feed-item.skipped { opacity: 0.72; }
+
+  .thumb {
+    width: 58px;
+    height: 58px;
+    border-radius: 8px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    color: var(--muted);
+    overflow: hidden;
+  }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+  .feed-main { min-width: 0; flex: 1; }
+  .feed-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .feed-title {
+    font-weight: 600;
+    font-size: 13.5px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .feed-meta {
+    font-size: 12px;
+    color: var(--muted);
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+  }
+  .feed-note {
+    margin-top: 6px;
+    font-size: 12px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    display: inline-block;
+  }
+  .feed-note.ai-buy { border-color: rgba(34,197,94,0.3); background: var(--green-soft); color: var(--text); }
+  .feed-note.skip-note { font-family: var(--mono); font-size: 11.5px; }
+
+  .feed-actions {
+    margin-top: 8px;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .feed-right { text-align: right; flex-shrink: 0; }
+  .price-tag { font-family: var(--mono); font-weight: 700; font-size: 15px; }
+  .old-price { font-family: var(--mono); font-size: 11.5px; color: var(--muted); text-decoration: line-through; margin-right: 4px; }
+  .time-tag { font-size: 11px; color: var(--muted); font-family: var(--mono); margin-top: 2px; }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 7px;
+    border-radius: 5px;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+  .badge-sent { background: var(--green-soft); color: var(--green); }
+  .badge-skip { background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); }
+  .badge-alert { background: var(--red-soft); color: var(--red); }
+  .badge-accent { background: var(--accent-soft); color: var(--accent); }
+  .badge-blue { background: var(--blue-soft); color: var(--blue); }
+  .badge-purple { background: var(--purple-soft); color: var(--purple); }
+
+  /* Tables */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    text-align: left;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+    white-space: nowrap;
+    user-select: none;
+  }
+  th.sortable { cursor: pointer; }
+  th.sortable:hover { color: var(--text); }
+  td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,0.015); }
+
+  .inline-input { width: 70px; font-family: var(--mono); padding: 4px 7px !important; }
+  .inline-wide { width: 100%; min-width: 140px; padding: 4px 7px !important; font-size: 12px !important; }
+
+  .bulk-bar {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 9px 16px;
+    background: var(--accent-soft);
+    border-bottom: 1px solid rgba(245,158,11,0.3);
+    flex-wrap: wrap;
+  }
+  .bulk-bar.show { display: flex; }
+
+  .add-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .add-bar .grow { flex: 1; min-width: 210px; }
+
+  /* Charts */
+  .chart-wrap { padding: 12px 16px 16px; }
+  .bar-chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    height: 130px;
+    padding-top: 16px;
+  }
+  .bar-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    height: 100%;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+  .bar-val { font-size: 11px; font-family: var(--mono); color: var(--muted); }
+  .bar-fill {
+    width: 100%;
+    max-width: 44px;
+    border-radius: 6px 6px 2px 2px;
+    background: linear-gradient(180deg, var(--green), rgba(34,197,94,0.45));
+    min-height: 4px;
+    transition: height 0.25s;
+  }
+  .bar-lbl { font-size: 11px; color: var(--muted); }
+
+  /* Calculator */
+  .calc-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .calc-out {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 9px 12px;
+    border-radius: 7px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+
+  /* Logs */
+  .log-box {
+    background: var(--bg);
+    font-family: var(--mono);
+    font-size: 11.5px;
+    line-height: 1.6;
+    padding: 12px 14px;
+    max-height: 320px;
+    overflow-y: auto;
+    color: var(--muted);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  /* Settings */
+  .form-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .form-row:last-child { border-bottom: none; }
+  .form-label { font-weight: 500; }
+  .form-help { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  .toggle {
+    position: relative;
+    width: 36px;
+    height: 20px;
+    appearance: none;
+    background: var(--border-strong);
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 0.15s;
+    flex-shrink: 0;
+  }
+  .toggle:checked { background: var(--accent); }
+  .toggle::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform 0.15s;
+  }
+  .toggle:checked::after { transform: translateX(16px); }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 9px;
+    border-radius: 6px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    font-size: 12px;
+    font-family: var(--mono);
+  }
+  .chip button { border: none; background: none; color: var(--muted); cursor: pointer; font-size: 14px; line-height: 1; }
+  .chip button:hover { color: var(--red); }
+
+  .drop-zone {
+    border: 1.5px dashed var(--border-strong);
+    border-radius: 8px;
+    padding: 16px;
+    text-align: center;
+    color: var(--muted);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .drop-zone:hover, .drop-zone.drag { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
+
+  /* Modal & Toast */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.62);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 60;
+    padding: 16px;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    width: 100%;
+    max-width: 480px;
+    overflow: hidden;
+  }
+  .modal-footer {
+    padding: 11px 16px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    background: var(--surface-2);
+  }
+
+  .toast {
+    position: fixed;
+    bottom: 18px;
+    right: 18px;
+    z-index: 70;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    box-shadow: var(--shadow);
+    padding: 10px 14px;
+    border-radius: 9px;
+    display: none;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+  }
+  .toast.show { display: flex; }
+
+  .empty { padding: 26px 16px; text-align: center; color: var(--muted); font-size: 13px; }
+  .pos { color: var(--green); }
+  .neg { color: var(--red); }
+  .mono { font-family: var(--mono); }
+  .kbd {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+
+  @media (max-width: 900px) {
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .two-col, .equal-col { grid-template-columns: 1fr; }
+    .calc-grid { grid-template-columns: 1fr; }
+    .header-inner { padding: 10px 14px; }
+    main { padding: 14px; }
+    .thumb { width: 46px; height: 46px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="brand">
+      <span id="statusDot" class="brand-dot"></span>
+      <span>Marktplaats Notifier</span>
+      <span id="statusPill" class="pill live">Running</span>
+      <span id="modePill" class="pill demo" style="display:none">Preview data</span>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-sm" id="btnDesktopNotify" onclick="toggleDesktopAlerts()">Desktop alerts: Off</button>
+      <button class="btn btn-sm" onclick="snooze(60)">Snooze 1h</button>
+      <button class="btn btn-sm" onclick="snooze(180)">3h</button>
+      <button class="btn btn-sm" id="btnTogglePause" onclick="togglePause()">Pause</button>
+      <button class="btn btn-sm btn-ghost" onclick="toggleTheme()" id="themeBtn">Light</button>
+    </div>
+  </div>
+  <nav>
+    <button class="active" data-tab="overview" onclick="switchTab('overview', this)">Overview &amp; Feed</button>
+    <button data-tab="searches" onclick="switchTab('searches', this)">Searches <span class="tab-count" id="navSearchCount">0</span></button>
+    <button data-tab="watch" onclick="switchTab('watch', this)">Watchlist &amp; Stale <span class="tab-count" id="navWatchCount">0</span></button>
+    <button data-tab="flips" onclick="switchTab('flips', this)">Flips &amp; Profit <span class="tab-count" id="navFlipCount">0</span></button>
+    <button data-tab="settings" onclick="switchTab('settings', this)">Settings, AI &amp; Tools</button>
+  </nav>
+</header>
+
+<main>
+  <!-- OVERVIEW & FEED -->
+  <section id="tab-overview" class="panel active">
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Active searches</div>
+        <div class="stat-value" id="statSearches">0</div>
+        <div class="stat-sub" id="statPostcode">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Checks today</div>
+        <div class="stat-value" id="statChecks">0</div>
+        <div class="stat-sub" id="statDelay">Delay: 1500 ms</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Sent today</div>
+        <div class="stat-value pos" id="statSent">0</div>
+        <div class="stat-sub" id="statSkipped">0 skipped</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">History &amp; AI</div>
+        <div class="stat-value" id="statHistory">0</div>
+        <div class="stat-sub" id="statAi">AI off</div>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Live feed</div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <input type="text" id="feedSearch" placeholder="Filter feed..." oninput="renderOverview()" style="width:160px;padding:4px 8px;font-size:12px">
+            <div class="seg" id="feedFilter">
+              <button class="active" onclick="setFeedFilter('all', this)">All</button>
+              <button onclick="setFeedFilter('sent', this)">Sent</button>
+              <button onclick="setFeedFilter('skipped', this)">Skipped</button>
+            </div>
+          </div>
+        </div>
+        <div class="breakdown" id="skipBreakdown"></div>
+        <div id="feedList"></div>
+      </div>
+
+      <div>
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Quick actions</div>
+            <span class="mono" style="font-size:11px;color:var(--muted)" id="uptimeText">Uptime 0h 0m</span>
+          </div>
+          <div class="card-body" style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-sm" onclick="openPriceCheckModal()">Price check</button>
+            <button class="btn btn-sm" onclick="triggerTestNotification()">Test alert</button>
+            <button class="btn btn-sm" onclick="downloadBackup()">Download backup .zip</button>
+            <button class="btn btn-sm" onclick="switchTabByName('searches')">Edit searches</button>
+            <button class="btn btn-sm" onclick="switchTabByName('settings')">Filter tester</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Logs</div>
+            <span class="mono" style="font-size:11px;color:var(--muted)">Latest 25</span>
+          </div>
+          <div class="log-box" id="logBox"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SEARCHES -->
+  <section id="tab-searches" class="panel">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">Add search</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <select id="starterPackSelect" onchange="applyStarterPack(this.value); this.value='';" style="padding:4px 8px;font-size:12px">
+            <option value="">+ Add starter pack...</option>
+            <option value="monitors">Broken Monitors (5)</option>
+            <option value="pc">PC &amp; GPU Parts (5)</option>
+            <option value="consoles">Consoles (4)</option>
+            <option value="phones">Phones (3)</option>
+          </select>
+          <button class="btn btn-sm" onclick="exportSearchesTxt()">Export searches.txt</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="add-bar">
+          <input type="text" id="addQuery" class="grow" placeholder="Search words (e.g. rtx 3070) or paste a Marktplaats URL">
+          <input type="number" id="addPrice" placeholder="Max €" style="width:90px" min="0">
+          <select id="addCat" style="width:185px">
+            <option value="">All of Marktplaats</option>
+            <option value="322" selected>322 · Computers</option>
+            <option value="356">356 · Consoles &amp; Games</option>
+            <option value="820">820 · Phones</option>
+            <option value="31">31 · Audio, Tv &amp; Foto</option>
+            <option value="2600">2600 · Car Parts</option>
+            <option value="445">445 · Bikes</option>
+            <option value="537">537 · Appliances</option>
+            <option value="504">504 · Home</option>
+          </select>
+          <input type="text" id="addSkip" placeholder="Skip words (barst, strepen)" style="width:200px">
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer">
+            <input type="checkbox" id="addUrgent"> Urgent
+          </label>
+          <button class="btn btn-primary" onclick="addSearch()">Add</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">Your searches <span class="kbd">/</span></div>
+        <input type="text" id="searchFilter" placeholder="Filter by name or skip word..." oninput="renderSearches()" style="width:240px">
+      </div>
+      <div class="filter-bar" id="catFilters">
+        <button class="filter-chip active" onclick="setCatFilter('all', this)">All</button>
+        <button class="filter-chip" onclick="setCatFilter('322', this)">Computers (322)</button>
+        <button class="filter-chip" onclick="setCatFilter('356', this)">Consoles (356)</button>
+        <button class="filter-chip" onclick="setCatFilter('820', this)">Phones (820)</button>
+        <button class="filter-chip" onclick="setCatFilter('urgent', this)">Urgent only</button>
+      </div>
+      <div class="bulk-bar" id="bulkBar">
+        <span id="bulkCount" style="font-weight:600;font-size:12.5px">0 selected</span>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn btn-xs" onclick="bulkAddSkipWord()">+ Add skip word</button>
+          <button class="btn btn-xs" onclick="bulkToggleUrgent(true)">Mark Urgent</button>
+          <button class="btn btn-xs" onclick="bulkToggleUrgent(false)">Unmark Urgent</button>
+          <button class="btn btn-xs btn-danger" onclick="bulkDelete()">Delete selected</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:32px"><input type="checkbox" id="selectAllBox" onchange="toggleSelectAll(this.checked)"></th>
+              <th class="sortable" onclick="sortSearches('query')">Search</th>
+              <th class="sortable" onclick="sortSearches('maxPrice')">Max €</th>
+              <th>Category</th>
+              <th>Skip words</th>
+              <th class="sortable" onclick="sortSearches('sent')">Stats</th>
+              <th>Urgent</th>
+              <th style="text-align:right">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="searchTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- WATCHLIST & STALE -->
+  <section id="tab-watch" class="panel">
+    <div class="equal-col">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Watched listings</div>
+          <span style="font-size:12px;color:var(--muted)">Checked every 5 min for drops, bids &amp; reserved</span>
+        </div>
+        <div id="watchList"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Unsold 7+ days (above max price)</div>
+          <span style="font-size:12px;color:var(--muted)">Good targets for a lower offer</span>
+        </div>
+        <div id="staleList"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FLIPS & PROFIT -->
+  <section id="tab-flips" class="panel">
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Profit this month</div>
+        <div class="stat-value pos" id="flipMonthProfit">+€0</div>
+        <div class="stat-sub" id="flipMonthSold">0 sold</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">All-time profit</div>
+        <div class="stat-value pos" id="flipAllProfit">+€0</div>
+        <div class="stat-sub" id="flipRoi">0% ROI</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Open inventory</div>
+        <div class="stat-value" id="flipOpenCount">0</div>
+        <div class="stat-sub" id="flipInvested">€0 invested</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Log purchase</div>
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <input type="text" id="flipNewName" placeholder="Item name" style="flex:1;min-width:0;padding:5px 8px">
+          <input type="number" id="flipNewPrice" placeholder="€" style="width:66px;padding:5px 8px" min="0" step="0.5">
+          <button class="btn btn-primary btn-sm" onclick="addFlip()">Add</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="equal-col">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Monthly profit</div>
+          <button class="btn btn-xs" onclick="exportFlipsCsv()">Export CSV</button>
+        </div>
+        <div class="chart-wrap">
+          <div class="bar-chart" id="profitChart"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Quick flip calculator</div>
+          <span style="font-size:11.5px;color:var(--muted)">Buy rules: broken ≤35% · working ≤55%</span>
+        </div>
+        <div class="card-body">
+          <div class="calc-grid">
+            <div>
+              <div style="font-size:11.5px;color:var(--muted);margin-bottom:4px">Buy price (€)</div>
+              <input type="number" id="calcBuy" value="55" min="0" oninput="updateCalc()" style="width:100%">
+            </div>
+            <div>
+              <div style="font-size:11.5px;color:var(--muted);margin-bottom:4px">Parts / ship (€)</div>
+              <input type="number" id="calcParts" value="15" min="0" oninput="updateCalc()" style="width:100%">
+            </div>
+            <div>
+              <div style="font-size:11.5px;color:var(--muted);margin-bottom:4px">Est. resale (€)</div>
+              <input type="number" id="calcSell" value="145" min="0" oninput="updateCalc()" style="width:100%">
+            </div>
+          </div>
+          <div class="calc-out" id="calcResult"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="equal-col">
+      <div class="card">
+        <div class="card-header"><div class="card-title">In stock / repair</div></div>
+        <div id="openFlipsList"></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">Recent sales</div></div>
+        <div id="soldFlipsList"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SETTINGS, AI & TOOLS -->
+  <section id="tab-settings" class="panel">
+    <div class="equal-col">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">General settings</div>
+          <button class="btn btn-primary btn-sm" onclick="saveSettings()">Save</button>
+        </div>
+        <div class="card-body">
+          <div class="form-row">
+            <div><div class="form-label">Postcode</div><div class="form-help">Used to calculate pickup distance</div></div>
+            <input type="text" id="setPostcode" style="width:106px;text-transform:uppercase" maxlength="6">
+          </div>
+          <div class="form-row">
+            <div><div class="form-label">Max pickup distance (km)</div><div class="form-help">0 = shipping only</div></div>
+            <input type="number" id="setPickupKm" style="width:86px" min="0">
+          </div>
+          <div class="form-row">
+            <div><div class="form-label">Telegram language</div><div class="form-help">Menus and Watch button</div></div>
+            <select id="setLang" style="width:130px">
+              <option value="en">English</option>
+              <option value="nl">Nederlands</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <div><div class="form-label">Quiet nights</div><div class="form-help">Normal alerts arrive silently at night</div></div>
+            <input type="checkbox" class="toggle" id="setQuietNights">
+          </div>
+          <div class="form-row">
+            <div><div class="form-label">Night hours</div><div class="form-help">24h format</div></div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <input type="number" id="setNightStart" min="0" max="23" style="width:60px">
+              <span>to</span>
+              <input type="number" id="setNightEnd" min="0" max="23" style="width:60px">
+            </div>
+          </div>
+          <div class="form-row">
+            <div><div class="form-label">Morning summary</div><div class="form-help">Summary of overnight silent listings</div></div>
+            <input type="checkbox" class="toggle" id="setDigest">
+          </div>
+          <div class="form-row">
+            <div><div class="form-label">Skip likely businesses</div><div class="form-help">Auto-skip ads flagged by BusinessFilter</div></div>
+            <input type="checkbox" class="toggle" id="setSkipBiz">
+          </div>
+          <div class="form-row">
+            <div><div class="form-label">Skip high description prices</div><div class="form-help">Skip "Bieden" ads asking &gt;35% over max in text</div></div>
+            <input type="checkbox" class="toggle" id="setSkipDescPrice">
+          </div>
+          <div class="form-row">
+            <div><div class="form-label">Fast 35s category mode</div><div class="form-help">Polls main categories every ~38s for instant alerts</div></div>
+            <input type="checkbox" class="toggle" id="setFastCat">
+          </div>
+          <div class="form-row">
+            <div><div class="form-label">Tweakers V&amp;A feed</div><div class="form-help">Watch Tweakers Vraag &amp; Aanbod for PC/console deals</div></div>
+            <input type="checkbox" class="toggle" id="setTweakers">
+          </div>
+          <div class="form-row">
+            <div><div class="form-label">2dehands.be (Belgium)</div><div class="form-help">Also check Belgian Marktplaats sibling for shipped deals</div></div>
+            <input type="checkbox" class="toggle" id="setTweedehands">
+          </div>
+          <div class="form-row">
+            <div><div class="form-label">Kleinanzeigen.de (Germany)</div><div class="form-help">Watch German listings with Versand möglich</div></div>
+            <input type="checkbox" class="toggle" id="setKleinanzeigen">
+          </div>
+          <div class="form-row">
+            <div><div class="form-label">Coolblue Tweedekans</div><div class="form-help">Watch Coolblue returned/open-box tech deals with warranty</div></div>
+            <input type="checkbox" class="toggle" id="setCoolblue">
+          </div>
+          <div class="form-row">
+            <div><div class="form-label">Vinted.nl</div><div class="form-help">Watch Vinted for cheap consoles, controllers, and electronics</div></div>
+            <input type="checkbox" class="toggle" id="setVinted">
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">AI photo &amp; deal grader</div>
+          <button class="btn btn-primary btn-sm" onclick="saveSettings()">Save AI</button>
+        </div>
+        <div class="card-body">
+          <div class="form-row">
+            <div><div class="form-label">Enable AI grader</div><div class="form-help">Only runs after all free filters pass</div></div>
+            <input type="checkbox" class="toggle" id="setAiEnabled">
+          </div>
+          <div class="form-row">
+            <div><div class="form-label">Provider</div><div class="form-help">Gemini has a free tier with high limits</div></div>
+            <select id="setAiProvider" onchange="onProviderChange()" style="width:185px">
+              <option value="gemini">Gemini (Recommended)</option>
+              <option value="groq">Groq</option>
+              <option value="openrouter">OpenRouter (100+ models)</option>
+              <option value="claude">Claude</option>
+              <option value="openai">OpenAI</option>
+              <option value="ollama">Ollama (Local)</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <div><div class="form-label">Model</div></div>
+            <input type="text" id="setAiModel" style="width:205px">
+          </div>
+          <div class="form-row">
+            <div><div class="form-label">API key</div><div class="form-help" id="aiKeyStatus">Saved locally in ai_key.txt</div></div>
+            <input type="password" id="setAiKey" placeholder="Paste key (optional)" style="width:205px">
+          </div>
+          <div class="form-row">
+            <div><div class="form-label">Daily limit</div><div class="form-help" id="aiCallsUsed">0 used today</div></div>
+            <input type="number" id="setAiLimit" min="1" max="500" style="width:86px">
+          </div>
+          <div class="form-row">
+            <div><div class="form-label">Auto-skip AI SKIP</div><div class="form-help">Off = still send with AI warning</div></div>
+            <input type="checkbox" class="toggle" id="setAiAutoSkip">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="equal-col">
+      <div class="card">
+        <div class="card-header"><div class="card-title">Blocklist &amp; Backup</div></div>
+        <div class="card-body">
+          <div style="margin-bottom:14px">
+            <div class="form-label" style="margin-bottom:6px">Global skip words</div>
+            <div style="display:flex;gap:8px">
+              <input type="text" id="newGlobalWord" placeholder="e.g. waterschade, alleen doos" style="flex:1">
+              <button class="btn btn-sm" onclick="addGlobalWord()">Add</button>
+            </div>
+            <div class="chips" id="globalWordChips"></div>
+          </div>
+          <div style="margin-bottom:16px">
+            <div class="form-label" style="margin-bottom:6px">Blocked sellers</div>
+            <div style="display:flex;gap:8px">
+              <input type="text" id="newBlockedSeller" placeholder="Exact seller name" style="flex:1">
+              <button class="btn btn-sm" onclick="addBlockedSeller()">Block</button>
+            </div>
+            <div class="chips" id="blockedSellerChips"></div>
+          </div>
+          <div style="border-top:1px solid var(--border);padding-top:14px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+              <div class="form-label">Backup &amp; Restore</div>
+              <button class="btn btn-sm" onclick="downloadBackup()">Download .zip</button>
+            </div>
+            <div class="drop-zone" id="dropZone" onclick="document.getElementById('restoreInput').click()">
+              Drop a backup <code>.zip</code> or <code>searches.txt</code> here, or click to upload
+              <input type="file" id="restoreInput" accept=".zip,.txt" style="display:none" onchange="handleRestoreUpload(this.files[0])">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Filter &amp; Repair Hint Tester</div>
+          <span style="font-size:11.5px;color:var(--muted)">Test how your rules react to any ad text</span>
+        </div>
+        <div class="card-body">
+          <textarea id="testerText" rows="3" placeholder="Paste a Marktplaats title + description here, e.g. 'Monitor geen beeld wel geluid, geen waterschade, barst in scherm'" oninput="runFilterTest()"></textarea>
+          <div id="testerOutput" style="margin-top:10px;font-size:12.5px;display:flex;flex-direction:column;gap:6px"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">Repair hints (hints.txt)</div>
+        <button class="btn btn-primary btn-sm" onclick="saveHints()">Save hints</button>
+      </div>
+      <div class="card-body">
+        <textarea id="hintsEditor" rows="8" spellcheck="false" oninput="runFilterTest()"></textarea>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- General Modal (replaces browser prompt/alert cleanly) -->
+<div class="modal-backdrop" id="modalBackdrop" onclick="if(event.target===this) closeModal()">
+  <div class="modal">
+    <div class="card-header">
+      <div class="card-title" id="modalTitle">Modal</div>
+      <button class="btn btn-sm btn-ghost" onclick="closeModal()">Close</button>
+    </div>
+    <div class="card-body" id="modalBody"></div>
+    <div class="modal-footer" id="modalFooter"></div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast">
+  <span id="toastText"></span>
+  <button class="btn btn-sm" id="toastUndo" style="display:none" onclick="runUndo()">Undo</button>
+</div>
+
+<script>
+const DEFAULT_MODELS = {
+  gemini: "gemini-2.5-flash",
+  groq: "meta-llama/llama-4-scout-17b-16e-instruct",
+  openrouter: "google/gemini-2.5-flash",
+  claude: "claude-haiku-4-5",
+  openai: "gpt-4o-mini",
+  ollama: "llama3.2-vision"
+};
+
+const STARTER_PACKS = {
+  monitors: [
+    { query: "defect monitor", maxPrice: 80, category: "322", skipWords: ["barst","gebarsten","strepen","lijnen","waterschade"] },
+    { query: "monitor geen beeld", maxPrice: 60, category: "322", skipWords: ["barst","gebarsten","strepen","lijnen","waterschade"] },
+    { query: "monitor gaat niet aan", maxPrice: 50, category: "322", skipWords: ["barst","gebarsten","strepen","lijnen","waterschade"] },
+    { query: "monitor zonder voet", maxPrice: 50, category: "322", skipWords: ["barst","gebarsten","strepen","lijnen","waterschade"] },
+    { query: "samsung odyssey defect", maxPrice: 90, category: "322", skipWords: ["barst","gebarsten","strepen","lijnen","waterschade"] }
+  ],
+  pc: [
+    { query: "pc defect", maxPrice: 100, category: "322", skipWords: ["waterschade"] },
+    { query: "game pc defect", maxPrice: 150, category: "322", skipWords: ["waterschade"] },
+    { query: "rtx 3060", maxPrice: 110, category: "322", skipWords: ["waterschade"] },
+    { query: "rtx 3070", maxPrice: 140, category: "322", skipWords: ["waterschade"] },
+    { query: "ddr4 32gb", maxPrice: 75, category: "322", skipWords: ["waterschade"] }
+  ],
+  consoles: [
+    { query: "ps5 defect", maxPrice: 120, category: "356", skipWords: ["waterschade"] },
+    { query: "ps5 geen beeld", maxPrice: 80, category: "356", skipWords: ["waterschade"] },
+    { query: "ps4 pro defect", maxPrice: 50, category: "356", skipWords: ["waterschade"] },
+    { query: "joycon drift", maxPrice: 10, category: "356", skipWords: ["waterschade"] }
+  ],
+  phones: [
+    { query: "galaxy a55 defect", maxPrice: 60, category: "820", skipWords: ["waterschade"] },
+    { query: "galaxy a54 defect", maxPrice: 50, category: "820", skipWords: ["waterschade"] },
+    { query: "iphone scherm kapot", maxPrice: 80, category: "820", skipWords: ["waterschade"] }
+  ]
+};
+
+let isDemo = false;
+let feedFilter = "all";
+let catFilter = "all";
+let sortField = null;
+let sortDir = 1;
+let selectedIds = new Set();
+let desktopAlerts = false;
+let lastKnownSentId = null;
+let undoCallback = null;
+let toastTimer = null;
+
+let state = {
+  status: {
+    paused: false,
+    pausedUntil: null,
+    postcode: "3511AB",
+    pickupKm: 15,
+    checksToday: 412,
+    sentToday: 7,
+    skippedToday: 138,
+    delayMs: 1500,
+    historyCount: 1842,
+    uptime: "6h 24m",
+    aiCallsToday: 5,
+    aiKeySet: true,
+    skipBreakdown: { price: 62, skipWord: 39, business: 23, outbid: 14 }
+  },
+  feed: [
+    {
+      timestamp: "18:41:12", kind: "sent", listingId: "m2189441201",
+      title: "Samsung Odyssey G5 27 inch - geen beeld wel lampje",
+      priceText: "€55", price: 55, oldPrice: 0, typicalPct: -48,
+      search: "defect monitor", alert: "SUPER DEAL",
+      reason: "AI BUY · No panel cracks visible; likely power board or backlight · Resale €130-160",
+      aiVerdict: "BUY", seller: "Jan", sellerRating: "4.9 (34)", verified: true,
+      city: "Utrecht (4 km) · Shipping", photo: "", link: "https://www.marktplaats.nl"
+    },
+    {
+      timestamp: "18:38:40", kind: "skipped", listingId: "m2189440882",
+      title: "LG UltraGear 27GN800 defect scherm met barst",
+      priceText: "€40", price: 40, oldPrice: 0, typicalPct: 0,
+      search: "lg ultragear defect", alert: "",
+      reason: "Skip word matched: barst",
+      aiVerdict: "", seller: "Kees", sellerRating: "", verified: false,
+      city: "Amersfoort (21 km)", photo: "", link: "https://www.marktplaats.nl"
+    },
+    {
+      timestamp: "18:35:05", kind: "sent", listingId: "m2189439110",
+      title: "MSI RTX 3070 Ventus 2X - ventilatoren maken lawaai",
+      priceText: "€125", price: 125, oldPrice: 160, typicalPct: -34,
+      search: "rtx 3070", alert: "PRICE DROP",
+      reason: "AI BUY · Dusty/noisy fan is an easy €12 swap · Resale €210-240",
+      aiVerdict: "BUY", seller: "Bram", sellerRating: "5.0 (12)", verified: true,
+      city: "Arnhem · Shipping", photo: "", link: "https://www.marktplaats.nl"
+    },
+    {
+      timestamp: "18:31:52", kind: "skipped", listingId: "m2189438504",
+      title: "PS5 Disc Edition defect - bieden",
+      priceText: "Bieden", price: 0, oldPrice: 0, typicalPct: 0,
+      search: "ps5 defect", alert: "",
+      reason: "Highest bid €165 > max €120",
+      aiVerdict: "", seller: "Daan", sellerRating: "", verified: false,
+      city: "Rotterdam", photo: "", link: "https://www.marktplaats.nl"
+    },
+    {
+      timestamp: "18:27:19", kind: "skipped", listingId: "m2189437991",
+      title: "HP EliteDesk 800 G5 Mini i5 16GB SSD (garantie)",
+      priceText: "€79.95", price: 79.95, oldPrice: 0, typicalPct: 0,
+      search: "elitedesk mini", alert: "",
+      reason: "Business account (TRADER)",
+      aiVerdict: "", seller: "RefurbPC BV", sellerRating: "", verified: true,
+      city: "Eindhoven", photo: "", link: "https://www.marktplaats.nl"
+    }
+  ],
+  logs: [
+    "[18:41:12] Sent (Owner / defect monitor): Samsung Odyssey G5 27 inch - geen beeld wel lampje",
+    "[18:38:40] Skipped (barst): LG UltraGear 27GN800 defect scherm met barst",
+    "[18:35:05] Sent (Owner / rtx 3070): MSI RTX 3070 Ventus 2X - ventilatoren maken lawaai",
+    "[18:31:52] Skipped (highest bid €165 > max €120): PS5 Disc Edition defect - bieden",
+    "[18:27:19] Skipped (business): HP EliteDesk 800 G5 Mini i5 16GB SSD (garantie)",
+    "[18:15:00] History: remembered 1842 listings."
+  ],
+  searches: [
+    { id: 1, query: "defect monitor", maxPrice: 100, category: "322", subCategory: 0, skipWords: ["barst","gebarsten","strepen","lijnen","waterschade"], urgent: false, sent: 14, skipped: 48 },
+    { id: 2, query: "monitor geen beeld", maxPrice: 60, category: "322", subCategory: 0, skipWords: ["barst","gebarsten","strepen","lijnen","waterschade"], urgent: false, sent: 9, skipped: 27 },
+    { id: 3, query: "samsung odyssey defect", maxPrice: 90, category: "322", subCategory: 0, skipWords: ["barst","gebarsten","strepen","lijnen","waterschade"], urgent: true, sent: 6, skipped: 11 },
+    { id: 4, query: "rtx 3070", maxPrice: 140, category: "322", subCategory: 0, skipWords: ["waterschade"], urgent: true, sent: 11, skipped: 64 },
+    { id: 5, query: "lenovo tiny", maxPrice: 80, category: "322", subCategory: 0, skipWords: ["waterschade"], urgent: false, sent: 5, skipped: 18 },
+    { id: 6, query: "ps5 defect", maxPrice: 120, category: "356", subCategory: 0, skipWords: ["waterschade"], urgent: false, sent: 8, skipped: 39 },
+    { id: 7, query: "galaxy a55 defect", maxPrice: 60, category: "820", subCategory: 0, skipWords: ["waterschade"], urgent: false, sent: 2, skipped: 9 }
+  ],
+  watchlist: [
+    { id: "m2189441201", title: "Samsung Odyssey G5 27 inch - geen beeld", lastPrice: 55, highestBid: 40, bidCount: 2, targetPrice: 45, status: "ACTIVE", link: "https://www.marktplaats.nl" },
+    { id: "m2189120499", title: "Lenovo ThinkCentre M720q Tiny i5", lastPrice: 95, highestBid: 0, bidCount: 0, targetPrice: 75, status: "ACTIVE", link: "https://www.marktplaats.nl" }
+  ],
+  stale: [
+    { id: "m2185012344", title: "AOC 27G2U 144Hz monitor gaat niet aan", price: 65, maxPrice: 50, daysOld: 11, search: "aoc defect", link: "https://www.marktplaats.nl" },
+    { id: "m2184321109", title: "Game PC start niet op (GTX 1660 / Ryzen 5)", price: 185, maxPrice: 150, daysOld: 9, search: "game pc defect", link: "https://www.marktplaats.nl" }
+  ],
+  flips: [
+    { id: 1, name: "Dell U2720Q (power board)", buyPrice: 55, partsCost: 14, sellPrice: 185, boughtAt: "2026-08-09", soldAt: "2026-08-18" },
+    { id: 2, name: "RTX 3060 12GB (fan swap)", buyPrice: 95, partsCost: 11, sellPrice: 190, boughtAt: "2026-09-02", soldAt: "2026-09-10" },
+    { id: 3, name: "PS5 HDMI repair", buyPrice: 110, partsCost: 8, sellPrice: 280, boughtAt: "2026-10-04", soldAt: "2026-10-12" },
+    { id: 4, name: "LG 27GL850 (backlight fix)", buyPrice: 45, partsCost: 11, sellPrice: 145, boughtAt: "2026-11-04", soldAt: "2026-11-11" },
+    { id: 5, name: "PS4 Pro (paste + clean)", buyPrice: 40, partsCost: 4, sellPrice: 115, boughtAt: "2026-11-14", soldAt: "2026-11-18" },
+    { id: 6, name: "Samsung Odyssey G5 27\"", buyPrice: 55, partsCost: 0, sellPrice: null, boughtAt: "2026-11-25", soldAt: null },
+    { id: 7, name: "MSI RTX 3070 (fan swap)", buyPrice: 125, partsCost: 14, sellPrice: null, boughtAt: "2026-11-26", soldAt: null }
+  ],
+  settings: {
+    language: "en",
+    quietNightsEnabled: true,
+    nightStartHour: 23,
+    nightEndHour: 7,
+    morningDigestEnabled: true,
+    skipLikelyBusinesses: false,
+    skipHighDescriptionPrice: true,
+    fastCategoryMode: true,
+    enableTweakers: true,
+    enableTweedehands: true,
+    enableKleinanzeigen: true,
+    enableCoolblue: true,
+    enableVinted: true,
+    aiEnabled: true,
+    aiProvider: "gemini",
+    aiModel: "gemini-2.5-flash",
+    aiDailyLimit: 30,
+    aiAutoSkip: false
+  },
+  blocklist: {
+    globalSkipWords: ["waterschade", "alleen doos", "lege doos"],
+    blockedSellers: ["QuickFlipElectronics"]
+  },
+  hints: `# Repair hints: words;hint;question to ask the seller\n# Use + when all parts must match, e.g. ps5+geen beeld\nscherm gebroken,gebroken scherm,barst;Broken screen: panel usually costs more than a monitor is worth;Is er achter de barst nog beeld te zien?\ngeen beeld+geluid,zwart scherm+geluid;Sound but no picture: usually backlight or power board;Als je met een zaklamp op het scherm schijnt, zie je dan iets?\noververhit,te heet;Overheating: often dried thermal paste or dusty fan;Hoe lang blijft hij aan voordat hij uitvalt?\nventilator+lawaai,maakt lawaai;Loud fan: usually dust or worn fan bearing;Is hij ooit schoongemaakt?`
+};
+
+async function api(path, options = {}) {
+  if (isDemo) return null;
+  try {
+    const res = await fetch(path, { headers: { "Content-Type": "application/json" }, ...options });
+    if (!res.ok) throw new Error(await res.text());
+    const ct = res.headers.get("content-type") || "";
+    return ct.includes("application/json") ? await res.json() : await res.text();
+  } catch {
+    return null;
+  }
+}
+
+async function init() {
+  if (localStorage.getItem("mp_theme") === "light") {
+    document.documentElement.setAttribute("data-theme", "light");
+    document.getElementById("themeBtn").textContent = "Dark";
+  }
+
+  desktopAlerts = localStorage.getItem("mp_desktop_alerts") === "1" && ("Notification" in window) && Notification.permission === "granted";
+  updateDesktopAlertBtn();
+
+  if (location.protocol === "file:") {
+    isDemo = true;
+  } else {
+    const live = await api("/api/state");
+    if (live) state = live;
+    else isDemo = true;
+  }
+
+  document.getElementById("modePill").style.display = isDemo ? "inline-flex" : "none";
+  const firstSent = state.feed.find(f => f.kind === "sent");
+  if (firstSent) lastKnownSentId = firstSent.listingId;
+
+  setupDropZone();
+  setupKeyboardShortcuts();
+  renderAll();
+  updateCalc();
+  runFilterTest();
+
+  if (!isDemo) {
+    const refreshLive = async () => {
+      const live = await api("/api/state");
+      if (!live) return;
+      const newestSent = live.feed.find(f => f.kind === "sent");
+      if (desktopAlerts && newestSent && newestSent.listingId !== lastKnownSentId) {
+        lastKnownSentId = newestSent.listingId;
+        fireDesktopNotification(newestSent);
+      }
+      state = live;
+      renderHeader();
+      renderOverview();
+      if (!document.activeElement?.closest("#watchList")) renderWatchAndStale();
+      renderFlips();
+    };
+
+    // Real-time Server-Sent Events stream for instant updates
+    if ("EventSource" in window) {
+      const es = new EventSource("/api/events");
+      es.addEventListener("update", () => refreshLive());
+    }
+    // Lightweight fallback poll every 15s
+    setInterval(refreshLive, 15000);
+  }
+}
+
+function setupKeyboardShortcuts() {
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape") closeModal();
+    if (e.key === "/" && !["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) {
+      e.preventDefault();
+      switchTabByName("searches");
+      document.getElementById("searchFilter").focus();
+    }
+  });
+}
+
+function setupDropZone() {
+  const dz = document.getElementById("dropZone");
+  dz.addEventListener("dragover", e => { e.preventDefault(); dz.classList.add("drag"); });
+  dz.addEventListener("dragleave", () => dz.classList.remove("drag"));
+  dz.addEventListener("drop", e => {
+    e.preventDefault();
+    dz.classList.remove("drag");
+    if (e.dataTransfer.files.length) handleRestoreUpload(e.dataTransfer.files[0]);
+  });
+}
+
+function renderAll() {
+  renderHeader();
+  renderOverview();
+  renderSearches();
+  renderWatchAndStale();
+  renderFlips();
+  renderSettings();
+}
+
+function renderHeader() {
+  const dot = document.getElementById("statusDot");
+  const pill = document.getElementById("statusPill");
+  const btn = document.getElementById("btnTogglePause");
+
+  if (state.status.paused) {
+    dot.classList.add("paused");
+    pill.className = "pill paused";
+    pill.textContent = state.status.pausedUntil ? `Snoozed until ${state.status.pausedUntil}` : "Paused";
+    btn.textContent = "Resume";
+  } else {
+    dot.classList.remove("paused");
+    pill.className = "pill live";
+    pill.textContent = "Running";
+    btn.textContent = "Pause";
+  }
+
+  document.getElementById("navSearchCount").textContent = state.searches.length;
+  document.getElementById("navWatchCount").textContent = state.watchlist.length;
+  document.getElementById("navFlipCount").textContent = state.flips.filter(f => f.sellPrice == null).length;
+}
+
+function renderOverview() {
+  document.getElementById("statSearches").textContent = state.searches.length;
+  document.getElementById("statPostcode").textContent = `${state.status.postcode} · ${state.status.pickupKm} km pickup`;
+  document.getElementById("statChecks").textContent = state.status.checksToday;
+  document.getElementById("statDelay").textContent = `Delay: ${state.status.delayMs} ms`;
+  document.getElementById("statSent").textContent = state.status.sentToday;
+  document.getElementById("statSkipped").textContent = `${state.status.skippedToday} skipped today`;
+  document.getElementById("statHistory").textContent = state.status.historyCount;
+  document.getElementById("statAi").textContent = state.settings.aiEnabled
+    ? `${state.settings.aiProvider} (${state.status.aiCallsToday}/${state.settings.aiDailyLimit} today)`
+    : "AI off";
+  document.getElementById("uptimeText").textContent = `Uptime ${state.status.uptime}`;
+
+  // Skip breakdown bar
+  const sb = state.status.skipBreakdown || { price: 0, skipWord: 0, business: 0, outbid: 0 };
+  const totalSkip = sb.price + sb.skipWord + sb.business + sb.outbid;
+  const bdEl = document.getElementById("skipBreakdown");
+  if (totalSkip > 0) {
+    const pct = n => Math.max(2, Math.round((n / totalSkip) * 100));
+    bdEl.style.display = "block";
+    bdEl.innerHTML = `
+      <div class="breakdown-bar">
+        <div style="width:${pct(sb.price)}%;background:var(--blue)"></div>
+        <div style="width:${pct(sb.skipWord)}%;background:var(--red)"></div>
+        <div style="width:${pct(sb.business)}%;background:var(--accent)"></div>
+        <div style="width:${pct(sb.outbid)}%;background:var(--purple)"></div>
+      </div>
+      <div class="breakdown-legend">
+        <span><span class="legend-dot" style="background:var(--blue)"></span>Over max price: ${sb.price}</span>
+        <span><span class="legend-dot" style="background:var(--red)"></span>Skip words: ${sb.skipWord}</span>
+        <span><span class="legend-dot" style="background:var(--accent)"></span>Business: ${sb.business}</span>
+        <span><span class="legend-dot" style="background:var(--purple)"></span>Outbid / other: ${sb.outbid}</span>
+      </div>`;
+  } else {
+    bdEl.style.display = "none";
+  }
+
+  // Feed cards
+  const q = (document.getElementById("feedSearch").value || "").trim().toLowerCase();
+  const items = state.feed.filter(f => {
+    if (feedFilter !== "all" && f.kind !== feedFilter) return false;
+    if (q && !(f.title + " " + f.search + " " + f.reason + " " + f.seller).toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  const feedEl = document.getElementById("feedList");
+  if (items.length === 0) {
+    feedEl.innerHTML = `<div class="empty">No matching activity yet.</div>`;
+  } else {
+    feedEl.innerHTML = items.map(item => {
+      const watched = state.watchlist.some(w => w.id === item.listingId);
+      const thumbHtml = item.photo
+        ? `<img src="${esc(item.photo)}" alt="">`
+        : `<span>${item.kind === "sent" ? "📦" : "⊘"}</span>`;
+      return `
+        <div class="feed-item ${item.kind === "skipped" ? "skipped" : ""}">
+          <div class="thumb">${thumbHtml}</div>
+          <div class="feed-main">
+            <div class="feed-top">
+              <div class="feed-title">
+                <span class="badge ${item.kind === "sent" ? "badge-sent" : "badge-skip"}">${item.kind === "sent" ? "SENT" : "SKIP"}</span>
+                ${item.source && item.source !== "Marktplaats" ? `<span class="badge badge-accent">${esc(item.source)}</span>` : ""}
+                ${item.alert ? `<span class="badge badge-alert">${esc(item.alert)}</span>` : ""}
+                ${item.typicalPct && item.typicalPct <= -20 ? `<span class="badge badge-accent">${item.typicalPct}% typical</span>` : ""}
+                <a href="${esc(item.link)}" target="_blank" rel="noopener">${esc(item.title)}</a>
+              </div>
+              <div class="feed-right">
+                <div class="price-tag">${item.oldPrice > 0 ? `<span class="old-price">${fmtEuro(item.oldPrice)}</span>` : ""}${esc(item.priceText)}</div>
+                <div class="time-tag">${esc(item.timestamp)}</div>
+              </div>
+            </div>
+            <div class="feed-meta">
+              <span><strong>${esc(item.search)}</strong></span>
+              <span>${esc(item.seller || "-")}${item.verified ? " ✓" : ""}${item.sellerRating ? ` · ★ ${esc(item.sellerRating)}` : ""}</span>
+              <span>${esc(item.city || "")}</span>
+            </div>
+            ${item.reason ? `<div class="feed-note ${item.aiVerdict === "BUY" ? "ai-buy" : (item.kind === "skipped" ? "skip-note" : "")}">${esc(item.reason)}</div>` : ""}
+            <div class="feed-actions">
+              <a class="btn btn-xs" href="${esc(item.link)}" target="_blank" rel="noopener">Open ad</a>
+              <button class="btn btn-xs ${watched ? "btn-green" : ""}" onclick="toggleWatchFromFeed('${esc(item.listingId)}')">${watched ? "Watching ✓" : "Watch"}</button>
+              ${item.kind === "sent" ? `<button class="btn btn-xs" onclick="openBoughtModal('${escJs(item.title)}', ${item.price || 0})">Bought</button>` : ""}
+              ${item.seller ? `<button class="btn btn-xs btn-ghost" onclick="quickBlockSeller('${escJs(item.seller)}')">Block seller</button>` : ""}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  document.getElementById("logBox").textContent = state.logs.join("\n") || "No logs yet.";
+}
+
+function renderSearches() {
+  const q = (document.getElementById("searchFilter").value || "").trim().toLowerCase();
+  let list = state.searches.filter(s => {
+    if (catFilter === "urgent" && !s.urgent) return false;
+    if (catFilter !== "all" && catFilter !== "urgent" && s.category !== catFilter) return false;
+    if (q && !(s.query + " " + (s.skipWords || []).join(" ")).toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  if (sortField) {
+    list = list.slice().sort((a, b) => {
+      const av = a[sortField] ?? 0;
+      const bv = b[sortField] ?? 0;
+      if (typeof av === "string") return av.localeCompare(bv) * sortDir;
+      return (av - bv) * sortDir;
+    });
+  }
+
+  const tbody = document.getElementById("searchTableBody");
+  if (list.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" class="empty">No matching searches.</td></tr>`;
+    updateBulkBar();
+    return;
+  }
+
+  tbody.innerHTML = list.map(s => {
+    const cat = s.category ? (s.subCategory ? `${s.category}/${s.subCategory}` : s.category) : "";
+    const checked = selectedIds.has(s.id) ? "checked" : "";
+    return `
+      <tr>
+        <td><input type="checkbox" ${checked} onchange="toggleSelectRow(${s.id}, this.checked)"></td>
+        <td><strong>${esc(s.query)}</strong></td>
+        <td><input type="number" class="inline-input" value="${s.maxPrice}" min="0" onchange="updateSearchField(${s.id}, 'maxPrice', Number(this.value))"></td>
+        <td><input type="text" class="inline-input" style="width:82px" value="${esc(cat)}" placeholder="all" onchange="updateSearchCat(${s.id}, this.value)"></td>
+        <td><input type="text" class="inline-wide" value="${esc((s.skipWords || []).join(', '))}" placeholder="none" onchange="updateSearchSkip(${s.id}, this.value)"></td>
+        <td class="mono" style="font-size:12px;white-space:nowrap;color:var(--muted)"><span class="pos">${s.sent ?? 0}</span> / ${s.skipped ?? 0}</td>
+        <td><input type="checkbox" class="toggle" ${s.urgent ? "checked" : ""} onchange="updateSearchField(${s.id}, 'urgent', this.checked)"></td>
+        <td style="text-align:right;white-space:nowrap">
+          <button class="btn btn-xs" onclick="checkNow(${s.id})">Check now</button>
+          <button class="btn btn-xs btn-danger" onclick="deleteSearch(${s.id})">Delete</button>
+        </td>
+      </tr>
+    `;
+  }).join("");
+  updateBulkBar();
+}
+
+function renderWatchAndStale() {
+  const watchEl = document.getElementById("watchList");
+  if (state.watchlist.length === 0) {
+    watchEl.innerHTML = `<div class="empty">No watched listings. Click Watch on any listing in the feed or in Telegram.</div>`;
+  } else {
+    watchEl.innerHTML = state.watchlist.map(w => {
+      const gap = w.targetPrice > 0 && w.lastPrice > w.targetPrice
+        ? `<span class="badge badge-blue">€${Math.round(w.lastPrice - w.targetPrice)} above target</span>`
+        : (w.targetPrice > 0 && w.lastPrice > 0 && w.lastPrice <= w.targetPrice ? `<span class="badge badge-sent">Target hit</span>` : "");
+      return `
+        <div class="feed-item">
+          <div class="feed-main">
+            <div class="feed-title">
+              <a href="${esc(w.link)}" target="_blank" rel="noopener">${esc(w.title)}</a>
+              ${w.status === "RESERVED" ? `<span class="badge badge-accent">RESERVED</span>` : ""}
+              ${gap}
+            </div>
+            <div class="feed-meta">
+              <span>Current: <strong>${fmtEuro(w.lastPrice)}</strong></span>
+              ${w.highestBid > 0 ? `<span>Highest bid: ${fmtEuro(w.highestBid)} (${w.bidCount})</span>` : ""}
+              <span>Target €: <input type="number" class="inline-input" style="width:64px" value="${w.targetPrice || 0}" onchange="setWatchTarget('${esc(w.id)}', Number(this.value))"></span>
+            </div>
+          </div>
+          <button class="btn btn-xs btn-danger" onclick="removeWatch('${esc(w.id)}')">Stop</button>
+        </div>
+      `;
+    }).join("");
+  }
+
+  const staleEl = document.getElementById("staleList");
+  if (state.stale.length === 0) {
+    staleEl.innerHTML = `<div class="empty">No stale listings (7+ days unsold above your max) yet.</div>`;
+  } else {
+    staleEl.innerHTML = state.stale.map(s => `
+      <div class="feed-item">
+        <div class="feed-main">
+          <div class="feed-title"><a href="${esc(s.link)}" target="_blank" rel="noopener">${esc(s.title)}</a></div>
+          <div class="feed-meta">
+            <span><strong>${fmtEuro(s.price)}</strong> (your max €${s.maxPrice})</span>
+            <span>${s.daysOld} days unsold</span>
+            <span>${esc(s.search)}</span>
+          </div>
+          <div class="feed-actions">
+            <button class="btn btn-xs" onclick="watchStale('${esc(s.id)}')">Watch</button>
+            <button class="btn btn-xs" onclick="copyDutchOffer('${escJs(s.title)}', ${s.maxPrice})">Copy Dutch offer (€${s.maxPrice})</button>
+          </div>
+        </div>
+      </div>
+    `).join("");
+  }
+}
+
+function renderFlips() {
+  const sold = state.flips.filter(f => f.sellPrice != null);
+  const open = state.flips.filter(f => f.sellPrice == null);
+  const nowMonth = new Date().toISOString().slice(0, 7);
+  const monthSold = sold.filter(f => (f.soldAt || "").startsWith(nowMonth));
+
+  const profitOf = f => f.sellPrice - (f.buyPrice + (f.partsCost || 0));
+  const monthProfit = monthSold.reduce((sum, f) => sum + profitOf(f), 0);
+  const allProfit = sold.reduce((sum, f) => sum + profitOf(f), 0);
+  const allCost = sold.reduce((sum, f) => sum + f.buyPrice + (f.partsCost || 0), 0);
+  const invested = open.reduce((sum, f) => sum + f.buyPrice + (f.partsCost || 0), 0);
+
+  setSigned("flipMonthProfit", monthProfit);
+  document.getElementById("flipMonthSold").textContent = `${monthSold.length} sold this month`;
+  setSigned("flipAllProfit", allProfit);
+  document.getElementById("flipRoi").textContent = `${allCost > 0 ? Math.round((allProfit / allCost) * 100) : 0}% ROI (${sold.length} sold)`;
+  document.getElementById("flipOpenCount").textContent = open.length;
+  document.getElementById("flipInvested").textContent = `${fmtEuro(invested)} invested`;
+
+  // Monthly profit bar chart (last 6 months)
+  const months = [];
+  const d = new Date();
+  for (let i = 5; i >= 0; i--) {
+    const dt = new Date(d.getFullYear(), d.getMonth() - i, 1);
+    const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`;
+    const label = dt.toLocaleString("en-US", { month: "short" });
+    const sum = sold.filter(f => (f.soldAt || "").startsWith(key)).reduce((a, f) => a + profitOf(f), 0);
+    months.push({ label, sum });
+  }
+  const maxVal = Math.max(50, ...months.map(m => Math.abs(m.sum)));
+  document.getElementById("profitChart").innerHTML = months.map(m => {
+    const h = m.sum <= 0 ? 4 : Math.max(8, Math.round((m.sum / maxVal) * 86));
+    return `
+      <div class="bar-col">
+        <div class="bar-val">${m.sum > 0 ? fmtEuro(m.sum) : "€0"}</div>
+        <div class="bar-fill" style="height:${h}px;${m.sum === 0 ? "background:var(--border)" : ""}"></div>
+        <div class="bar-lbl">${m.label}</div>
+      </div>`;
+  }).join("");
+
+  const openEl = document.getElementById("openFlipsList");
+  openEl.innerHTML = open.length === 0
+    ? `<div class="empty">No open flips. Log a purchase above.</div>`
+    : open.map(f => `
+      <div class="feed-item">
+        <div class="feed-main">
+          <div class="feed-title"><span class="mono" style="color:var(--muted)">#${f.id}</span> ${esc(f.name)}</div>
+          <div class="feed-meta">
+            <span>Bought: ${fmtEuro(f.buyPrice)}</span>
+            <span>Parts: ${fmtEuro(f.partsCost || 0)}</span>
+            <span>Total: <strong>${fmtEuro(f.buyPrice + (f.partsCost || 0))}</strong></span>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn btn-xs" onclick="openPartsModal(${f.id})">+ Parts</button>
+          <button class="btn btn-xs btn-primary" onclick="openSoldModal(${f.id})">Sold</button>
+          <button class="btn btn-xs btn-danger" onclick="deleteFlip(${f.id})">Delete</button>
+        </div>
+      </div>
+    `).join("");
+
+  const soldEl = document.getElementById("soldFlipsList");
+  soldEl.innerHTML = sold.length === 0
+    ? `<div class="empty">No sales logged yet.</div>`
+    : sold.slice().reverse().map(f => {
+        const p = profitOf(f);
+        return `
+          <div class="feed-item">
+            <div class="feed-main">
+              <div class="feed-title"><span class="mono" style="color:var(--muted)">#${f.id}</span> ${esc(f.name)}</div>
+              <div class="feed-meta">
+                <span>Cost ${fmtEuro(f.buyPrice + (f.partsCost || 0))} → Sold ${fmtEuro(f.sellPrice)}</span>
+                <span>${esc(f.soldAt || "")}</span>
+              </div>
+            </div>
+            <div class="price-tag ${p >= 0 ? "pos" : "neg"}">${fmtSigned(p)}</div>
+          </div>
+        `;
+      }).join("");
+}
+
+function renderSettings() {
+  const s = state.settings;
+  document.getElementById("setPostcode").value = state.status.postcode || "";
+  document.getElementById("setPickupKm").value = state.status.pickupKm ?? 0;
+  document.getElementById("setLang").value = s.language || "en";
+  document.getElementById("setQuietNights").checked = !!s.quietNightsEnabled;
+  document.getElementById("setNightStart").value = s.nightStartHour ?? 23;
+  document.getElementById("setNightEnd").value = s.nightEndHour ?? 7;
+  document.getElementById("setDigest").checked = !!s.morningDigestEnabled;
+  document.getElementById("setSkipBiz").checked = !!s.skipLikelyBusinesses;
+  document.getElementById("setSkipDescPrice").checked = !!s.skipHighDescriptionPrice;
+  document.getElementById("setFastCat").checked = s.fastCategoryMode !== false;
+  document.getElementById("setTweakers").checked = s.enableTweakers !== false;
+  document.getElementById("setTweedehands").checked = s.enableTweedehands !== false;
+  document.getElementById("setKleinanzeigen").checked = s.enableKleinanzeigen !== false;
+  document.getElementById("setCoolblue").checked = s.enableCoolblue !== false;
+  document.getElementById("setVinted").checked = s.enableVinted !== false;
+
+  document.getElementById("setAiEnabled").checked = !!s.aiEnabled;
+  document.getElementById("setAiProvider").value = s.aiProvider || "gemini";
+  document.getElementById("setAiModel").value = s.aiModel || DEFAULT_MODELS[s.aiProvider] || "gemini-2.5-flash";
+  document.getElementById("setAiLimit").value = s.aiDailyLimit ?? 30;
+  document.getElementById("setAiAutoSkip").checked = !!s.aiAutoSkip;
+  document.getElementById("aiKeyStatus").textContent = state.status.aiKeySet ? "API key is set (leave blank to keep)" : "No key set yet";
+  document.getElementById("aiCallsUsed").textContent = `${state.status.aiCallsToday} / ${s.aiDailyLimit} used today`;
+
+  document.getElementById("globalWordChips").innerHTML = state.blocklist.globalSkipWords.map(w =>
+    `<span class="chip">${esc(w)}<button onclick="removeGlobalWord('${escJs(w)}')" title="Remove">&times;</button></span>`
+  ).join("") || `<span style="font-size:12px;color:var(--muted)">None</span>`;
+
+  document.getElementById("blockedSellerChips").innerHTML = state.blocklist.blockedSellers.map(n =>
+    `<span class="chip">${esc(n)}<button onclick="removeBlockedSeller('${escJs(n)}')" title="Unblock">&times;</button></span>`
+  ).join("") || `<span style="font-size:12px;color:var(--muted)">None</span>`;
+
+  document.getElementById("hintsEditor").value = state.hints || "";
+}
+
+// Desktop Alerts + Chime
+function updateDesktopAlertBtn() {
+  const btn = document.getElementById("btnDesktopNotify");
+  btn.textContent = desktopAlerts ? "Desktop alerts: On" : "Desktop alerts: Off";
+  btn.className = desktopAlerts ? "btn btn-sm btn-green" : "btn btn-sm";
+}
+
+async function toggleDesktopAlerts() {
+  if (!("Notification" in window)) {
+    showToast("Desktop notifications aren't supported in this browser");
+    return;
+  }
+  if (desktopAlerts) {
+    desktopAlerts = false;
+    localStorage.setItem("mp_desktop_alerts", "0");
+    updateDesktopAlertBtn();
+    showToast("Desktop alerts turned off");
+    return;
+  }
+  const perm = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
+  if (perm === "granted") {
+    desktopAlerts = true;
+    localStorage.setItem("mp_desktop_alerts", "1");
+    updateDesktopAlertBtn();
+    playChime();
+    showToast("Desktop alerts enabled");
+  } else {
+    showToast("Notification permission denied by browser");
+  }
+}
+
+function playChime() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    [660, 880].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.08, ctx.currentTime + i * 0.11);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + i * 0.11 + 0.25);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(ctx.currentTime + i * 0.11);
+      osc.stop(ctx.currentTime + i * 0.11 + 0.26);
+    });
+  } catch {}
+}
+
+function fireDesktopNotification(item) {
+  playChime();
+  if ("Notification" in window && Notification.permission === "granted") {
+    const n = new Notification(`${item.priceText} · ${item.title}`, {
+      body: `${item.search} · ${item.city}${item.reason ? "\n" + item.reason : ""}`
+    });
+    n.onclick = () => { window.open(item.link, "_blank"); n.close(); };
+  }
+}
+
+function triggerTestNotification() {
+  const sample = state.feed.find(f => f.kind === "sent") || {
+    title: "Samsung Odyssey G5 27 inch", priceText: "€55", search: "defect monitor", city: "Utrecht", reason: "Test alert", link: "https://www.marktplaats.nl"
+  };
+  fireDesktopNotification(sample);
+  showToast("Sent test alert" + (desktopAlerts ? " (desktop + chime)" : " (chime only — turn Desktop alerts On to see popup)"));
+}
+
+function openPriceCheckModal() {
+  openModal("Live market price check", `
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <input type="text" id="priceCheckInput" placeholder="e.g. rtx 3070 or samsung odyssey g5" style="flex:1" onkeydown="if(event.key==='Enter') runPriceCheck()">
+      <button class="btn btn-primary btn-sm" onclick="runPriceCheck()">Check</button>
+    </div>
+    <div id="priceCheckOut" style="font-size:13px;color:var(--muted)">Checks live Marktplaats listings + your 30-day history.</div>
+  `, null);
+}
+
+async function runPriceCheck() {
+  const q = (document.getElementById("priceCheckInput").value || "").trim();
+  if (!q) return;
+  const out = document.getElementById("priceCheckOut");
+  out.innerHTML = "Checking Marktplaats...";
+  if (isDemo) {
+    setTimeout(() => {
+      out.innerHTML = `<strong>Market price: ${esc(q)}</strong> (preview)<br>Lowest: €140 · Median: <strong>€210</strong> · Highest: €290<br><br>Buy targets: Broken ≤35%: <strong>€74</strong> · Working ≤55%: <strong>€116</strong>`;
+    }, 250);
+    return;
+  }
+  const res = await api("/api/price-check", { method: "POST", body: JSON.stringify({ query: q }) });
+  out.innerHTML = res?.html || "No priced listings found.";
+}
+
+// Feed quick actions
+function toggleWatchFromFeed(listingId) {
+  const idx = state.watchlist.findIndex(w => w.id === listingId);
+  if (idx >= 0) {
+    state.watchlist.splice(idx, 1);
+    api(`/api/watchlist/${listingId}`, { method: "DELETE" });
+    showToast("Removed from watchlist");
+  } else {
+    const item = state.feed.find(f => f.listingId === listingId);
+    if (!item) return;
+    state.watchlist.unshift({ id: item.listingId, title: item.title, lastPrice: item.price, highestBid: 0, bidCount: 0, targetPrice: 0, status: "ACTIVE", link: item.link });
+    api("/api/watchlist", { method: "POST", body: JSON.stringify(item) });
+    showToast(`Watching "${item.title}"`);
+  }
+  renderHeader();
+  renderOverview();
+  renderWatchAndStale();
+}
+
+function quickBlockSeller(seller) {
+  if (!seller) return;
+  if (state.blocklist.blockedSellers.includes(seller)) { showToast(`${seller} is already blocked`); return; }
+  state.blocklist.blockedSellers.push(seller);
+  api("/api/blocklist/sellers", { method: "POST", body: JSON.stringify({ seller }) });
+  renderSettings();
+  showToast(`Blocked seller "${seller}"`, () => {
+    state.blocklist.blockedSellers = state.blocklist.blockedSellers.filter(s => s !== seller);
+    renderSettings();
+  });
+}
+
+function copyDutchOffer(title, offer) {
+  const msg = `Hoi, is de ${title} nog beschikbaar? Ik kan hem overnemen voor €${offer}.`;
+  navigator.clipboard?.writeText(msg);
+  showToast("Copied Dutch offer to clipboard");
+}
+
+// Navigation & filters
+function switchTab(name, btn) {
+  document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+  document.querySelectorAll("nav button").forEach(b => b.classList.remove("active"));
+  document.getElementById("tab-" + name).classList.add("active");
+  btn.classList.add("active");
+}
+function switchTabByName(name) {
+  const btn = document.querySelector(`nav button[data-tab="${name}"]`);
+  if (btn) switchTab(name, btn);
+}
+function setFeedFilter(kind, btn) {
+  feedFilter = kind;
+  document.querySelectorAll("#feedFilter button").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  renderOverview();
+}
+function setCatFilter(cat, btn) {
+  catFilter = cat;
+  document.querySelectorAll("#catFilters button").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  renderSearches();
+}
+function sortSearches(field) {
+  if (sortField === field) sortDir *= -1;
+  else { sortField = field; sortDir = field === "query" ? 1 : -1; }
+  renderSearches();
+}
+
+function toggleTheme() {
+  const isLight = document.documentElement.getAttribute("data-theme") === "light";
+  if (isLight) {
+    document.documentElement.removeAttribute("data-theme");
+    localStorage.setItem("mp_theme", "dark");
+    document.getElementById("themeBtn").textContent = "Light";
+  } else {
+    document.documentElement.setAttribute("data-theme", "light");
+    localStorage.setItem("mp_theme", "light");
+    document.getElementById("themeBtn").textContent = "Dark";
+  }
+}
+
+async function togglePause() {
+  state.status.paused = !state.status.paused;
+  state.status.pausedUntil = null;
+  await api(state.status.paused ? "/api/pause" : "/api/resume", { method: "POST" });
+  renderHeader();
+  showToast(state.status.paused ? "Paused" : "Resumed");
+}
+
+async function snooze(minutes) {
+  const until = new Date(Date.now() + minutes * 60000);
+  const label = until.toTimeString().slice(0, 5);
+  state.status.paused = true;
+  state.status.pausedUntil = label;
+  await api("/api/snooze", { method: "POST", body: JSON.stringify({ minutes }) });
+  renderHeader();
+  showToast(`Snoozed until ${label}`);
+}
+
+// Searches CRUD + Bulk
+async function addSearch() {
+  const rawQuery = document.getElementById("addQuery").value.trim();
+  const maxPrice = Number(document.getElementById("addPrice").value);
+  const category = document.getElementById("addCat").value;
+  const skipRaw = document.getElementById("addSkip").value;
+  const urgent = document.getElementById("addUrgent").checked;
+
+  if (!rawQuery) { showToast("Enter search words or a Marktplaats URL"); return; }
+
+  let query = rawQuery;
+  let price = isNaN(maxPrice) || document.getElementById("addPrice").value === "" ? 50 : maxPrice;
+  if (rawQuery.includes("marktplaats.nl")) {
+    const m = rawQuery.match(/\/q\/([^\/#?]+)/i);
+    if (m) query = decodeURIComponent(m[1].replace(/\+/g, " "));
+  }
+  if (state.searches.some(s => s.query.toLowerCase() === query.toLowerCase())) {
+    showToast(`"${query}" is already in your list`);
+    return;
+  }
+
+  const rule = {
+    id: Math.max(0, ...state.searches.map(s => s.id)) + 1,
+    query, maxPrice: Math.max(0, Math.round(price)), category, subCategory: 0,
+    skipWords: skipRaw.split(",").map(s => s.trim().toLowerCase()).filter(Boolean),
+    urgent, sent: 0, skipped: 0
+  };
+
+  state.searches.unshift(rule);
+  const created = await api("/api/searches", { method: "POST", body: JSON.stringify(rule) });
+  if (created?.id) rule.id = created.id;
+  document.getElementById("addQuery").value = "";
+  document.getElementById("addPrice").value = "";
+  document.getElementById("addSkip").value = "";
+  document.getElementById("addUrgent").checked = false;
+  renderHeader();
+  renderSearches();
+  showToast(`Added "${rule.query}" (max €${rule.maxPrice})`);
+}
+
+function applyStarterPack(packId) {
+  const pack = STARTER_PACKS[packId];
+  if (!pack) return;
+  let added = 0;
+  for (const t of pack) {
+    if (state.searches.some(s => s.query.toLowerCase() === t.query.toLowerCase())) continue;
+    const rule = {
+      id: Math.max(0, ...state.searches.map(s => s.id)) + 1,
+      query: t.query, maxPrice: t.maxPrice, category: t.category, subCategory: 0,
+      skipWords: [...t.skipWords], urgent: false, sent: 0, skipped: 0
+    };
+    state.searches.push(rule);
+    api("/api/searches", { method: "POST", body: JSON.stringify(rule) });
+    added++;
+  }
+  renderHeader();
+  renderSearches();
+  showToast(added > 0 ? `Added ${added} searches from starter pack` : "All searches from that pack are already in your list");
+}
+
+function exportSearchesTxt() {
+  const lines = state.searches.map(s => {
+    const cat = s.category ? (s.subCategory ? `${s.category}/${s.subCategory}` : s.category) : "";
+    const skip = (s.skipWords || []).join(",");
+    if (s.urgent) return `${s.query};${s.maxPrice};${cat};${skip};urgent`;
+    if (skip) return `${s.query};${s.maxPrice};${cat};${skip}`;
+    if (cat) return `${s.query};${s.maxPrice};${cat}`;
+    return `${s.query};${s.maxPrice}`;
+  });
+  downloadText("searches.txt", lines.join("\n") + "\n");
+}
+
+function toggleSelectRow(id, checked) {
+  if (checked) selectedIds.add(id); else selectedIds.delete(id);
+  updateBulkBar();
+}
+function toggleSelectAll(checked) {
+  selectedIds.clear();
+  if (checked) state.searches.forEach(s => selectedIds.add(s.id));
+  renderSearches();
+}
+function updateBulkBar() {
+  const bar = document.getElementById("bulkBar");
+  document.getElementById("bulkCount").textContent = `${selectedIds.size} selected`;
+  bar.classList.toggle("show", selectedIds.size > 0);
+}
+function bulkAddSkipWord() {
+  openModal("Add skip word to selected", `
+    <p style="margin-bottom:8px;color:var(--muted)">Add comma-separated skip word(s) to ${selectedIds.size} selected searches:</p>
+    <input type="text" id="modalInput" placeholder="e.g. waterschade, barst" style="width:100%">
+  `, () => {
+    const words = document.getElementById("modalInput").value.split(",").map(w => w.trim().toLowerCase()).filter(Boolean);
+    if (!words.length) return;
+    state.searches.forEach(s => {
+      if (!selectedIds.has(s.id)) return;
+      for (const w of words) if (!s.skipWords.includes(w)) s.skipWords.push(w);
+      api(`/api/searches/${s.id}`, { method: "PUT", body: JSON.stringify(s) });
+    });
+    renderSearches();
+    showToast(`Updated ${selectedIds.size} searches`);
+  });
+}
+function bulkToggleUrgent(flag) {
+  state.searches.forEach(s => {
+    if (!selectedIds.has(s.id)) return;
+    s.urgent = flag;
+    api(`/api/searches/${s.id}`, { method: "PUT", body: JSON.stringify(s) });
+  });
+  renderSearches();
+  showToast(flag ? "Marked selected as Urgent" : "Unmarked Urgent");
+}
+function bulkDelete() {
+  const removed = state.searches.filter(s => selectedIds.has(s.id));
+  state.searches = state.searches.filter(s => !selectedIds.has(s.id));
+  removed.forEach(r => api(`/api/searches/${r.id}`, { method: "DELETE" }));
+  selectedIds.clear();
+  document.getElementById("selectAllBox").checked = false;
+  renderHeader();
+  renderSearches();
+  showToast(`Deleted ${removed.length} searches`, () => {
+    state.searches.unshift(...removed);
+    renderHeader();
+    renderSearches();
+  });
+}
+
+async function updateSearchField(id, field, val) {
+  const s = state.searches.find(x => x.id === id);
+  if (!s) return;
+  s[field] = val;
+  await api(`/api/searches/${id}`, { method: "PUT", body: JSON.stringify(s) });
+  showToast(`Updated "${s.query}"`);
+}
+async function updateSearchCat(id, raw) {
+  const s = state.searches.find(x => x.id === id);
+  if (!s) return;
+  const parts = raw.trim().split("/");
+  s.category = parts[0] || "";
+  s.subCategory = parts[1] ? Number(parts[1]) || 0 : 0;
+  await api(`/api/searches/${id}`, { method: "PUT", body: JSON.stringify(s) });
+  showToast(`Updated category for "${s.query}"`);
+}
+async function updateSearchSkip(id, raw) {
+  const s = state.searches.find(x => x.id === id);
+  if (!s) return;
+  s.skipWords = raw.split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
+  await api(`/api/searches/${id}`, { method: "PUT", body: JSON.stringify(s) });
+  showToast(`Updated skip words for "${s.query}"`);
+}
+async function deleteSearch(id) {
+  const idx = state.searches.findIndex(x => x.id === id);
+  if (idx < 0) return;
+  const removed = state.searches.splice(idx, 1)[0];
+  selectedIds.delete(id);
+  await api(`/api/searches/${id}`, { method: "DELETE" });
+  renderHeader();
+  renderSearches();
+  showToast(`Removed "${removed.query}"`, async () => {
+    state.searches.splice(idx, 0, removed);
+    await api("/api/searches", { method: "POST", body: JSON.stringify(removed) });
+    renderHeader();
+    renderSearches();
+  });
+}
+
+async function checkNow(id) {
+  const s = state.searches.find(x => x.id === id);
+  if (!s) return;
+  openModal(`Live check: ${s.query} (max €${s.maxPrice})`, `<div class="empty">Checking Marktplaats...</div>`, null);
+  if (isDemo) {
+    setTimeout(() => {
+      document.getElementById("modalBody").innerHTML = `
+        <p style="margin-bottom:10px;color:var(--muted)">Checked 30 listings · <strong>2</strong> match right now (preview):</p>
+        <div class="feed-item" style="padding:10px 0">
+          <div class="feed-main"><div class="feed-title"><a href="https://www.marktplaats.nl" target="_blank">${esc(s.query)} - example match</a></div><div class="feed-meta"><span>Utrecht (5 km)</span><span>Private</span></div></div>
+          <div class="price-tag">€${Math.max(10, Math.round(s.maxPrice * 0.72))}</div>
+        </div>`;
+    }, 260);
+    return;
+  }
+  const res = await api(`/api/searches/${id}/check`, { method: "POST" });
+  document.getElementById("modalBody").innerHTML = res?.html || `<div class="empty">No results.</div>`;
+}
+
+// Watchlist & Stale
+async function setWatchTarget(id, target) {
+  const w = state.watchlist.find(x => x.id === id);
+  if (!w) return;
+  w.targetPrice = Math.max(0, target || 0);
+  await api(`/api/watchlist/${id}`, { method: "PUT", body: JSON.stringify({ targetPrice: w.targetPrice }) });
+  renderWatchAndStale();
+  showToast("Target price updated");
+}
+async function removeWatch(id) {
+  const idx = state.watchlist.findIndex(x => x.id === id);
+  if (idx < 0) return;
+  const removed = state.watchlist.splice(idx, 1)[0];
+  await api(`/api/watchlist/${id}`, { method: "DELETE" });
+  renderHeader();
+  renderWatchAndStale();
+  renderOverview();
+  showToast(`Stopped watching "${removed.title}"`, () => {
+    state.watchlist.splice(idx, 0, removed);
+    renderHeader();
+    renderWatchAndStale();
+  });
+}
+async function watchStale(id) {
+  const s = state.stale.find(x => x.id === id);
+  if (!s) return;
+  if (state.watchlist.some(w => w.id === id)) { showToast("Already watching"); return; }
+  state.watchlist.unshift({ id: s.id, title: s.title, lastPrice: s.price, highestBid: 0, bidCount: 0, targetPrice: s.maxPrice, status: "ACTIVE", link: s.link });
+  await api("/api/watchlist", { method: "POST", body: JSON.stringify(s) });
+  renderHeader();
+  renderWatchAndStale();
+  showToast(`Watching "${s.title}"`);
+}
+
+// Flips + Calculator + Modals
+function updateCalc() {
+  const buy = Number(document.getElementById("calcBuy").value) || 0;
+  const parts = Number(document.getElementById("calcParts").value) || 0;
+  const sell = Number(document.getElementById("calcSell").value) || 0;
+  const cost = buy + parts;
+  const profit = sell - cost;
+  const roi = cost > 0 ? Math.round((profit / cost) * 100) : 0;
+  const buyPct = sell > 0 ? Math.round((buy / sell) * 100) : 0;
+  const ruleTag = buyPct <= 35 ? `<span class="badge badge-sent">≤35% broken rule</span>`
+    : (buyPct <= 55 ? `<span class="badge badge-accent">≤55% working rule</span>` : `<span class="badge badge-alert">${buyPct}% of resale</span>`);
+  document.getElementById("calcResult").innerHTML = `
+    <span class="${profit >= 0 ? "pos" : "neg"}">Net: <strong>${fmtSigned(profit)}</strong> (${roi}% ROI)</span>
+    <span>${ruleTag}</span>`;
+}
+
+function openBoughtModal(title, price) {
+  openModal("Log purchase", `
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <input type="text" id="mBuyName" value="${esc(title)}" placeholder="Item name">
+      <input type="number" id="mBuyPrice" value="${price || ""}" placeholder="Buy price (€)" step="0.5" min="0">
+    </div>
+  `, () => {
+    const name = document.getElementById("mBuyName").value.trim();
+    const buyPrice = Number(document.getElementById("mBuyPrice").value);
+    if (!name || isNaN(buyPrice) || buyPrice < 0) return;
+    const flip = { id: Math.max(0, ...state.flips.map(f => f.id)) + 1, name, buyPrice, partsCost: 0, sellPrice: null, boughtAt: new Date().toISOString().slice(0, 10), soldAt: null };
+    state.flips.push(flip);
+    api("/api/flips", { method: "POST", body: JSON.stringify(flip) }).then(r => { if (r?.id) { flip.id = r.id; renderFlips(); } });
+    renderHeader();
+    renderFlips();
+    showToast(`Logged #${flip.id} ${name}`);
+  });
+}
+
+async function addFlip() {
+  const name = document.getElementById("flipNewName").value.trim();
+  const buyPrice = Number(document.getElementById("flipNewPrice").value);
+  if (!name || isNaN(buyPrice) || buyPrice < 0) { showToast("Enter item name and buy price"); return; }
+  const flip = { id: Math.max(0, ...state.flips.map(f => f.id)) + 1, name, buyPrice, partsCost: 0, sellPrice: null, boughtAt: new Date().toISOString().slice(0, 10), soldAt: null };
+  state.flips.push(flip);
+  const created = await api("/api/flips", { method: "POST", body: JSON.stringify(flip) });
+  if (created?.id) flip.id = created.id;
+  document.getElementById("flipNewName").value = "";
+  document.getElementById("flipNewPrice").value = "";
+  renderHeader();
+  renderFlips();
+  showToast(`Logged #${flip.id} ${name}`);
+}
+
+function openPartsModal(id) {
+  const f = state.flips.find(x => x.id === id);
+  if (!f) return;
+  openModal(`Add parts to #${id} ${f.name}`, `
+    <input type="number" id="modalInput" placeholder="Parts cost in € (e.g. 12.50)" step="0.5" min="0" style="width:100%">
+  `, () => {
+    const cost = Number(document.getElementById("modalInput").value);
+    if (isNaN(cost) || cost < 0) return;
+    f.partsCost = (f.partsCost || 0) + cost;
+    api(`/api/flips/${id}/parts`, { method: "POST", body: JSON.stringify({ cost }) });
+    renderFlips();
+    showToast(`Added ${fmtEuro(cost)} parts to #${id}`);
+  });
+}
+
+function openSoldModal(id) {
+  const f = state.flips.find(x => x.id === id);
+  if (!f) return;
+  openModal(`Mark #${id} ${f.name} as sold`, `
+    <p style="margin-bottom:8px;color:var(--muted)">Total cost so far: <strong>${fmtEuro(f.buyPrice + (f.partsCost || 0))}</strong></p>
+    <input type="number" id="modalInput" placeholder="Sale price in € (e.g. 135)" step="0.5" min="0" style="width:100%">
+  `, () => {
+    const sellPrice = Number(document.getElementById("modalInput").value);
+    if (isNaN(sellPrice) || sellPrice < 0) return;
+    f.sellPrice = sellPrice;
+    f.soldAt = new Date().toISOString().slice(0, 10);
+    api(`/api/flips/${id}/sold`, { method: "POST", body: JSON.stringify({ sellPrice }) });
+    renderHeader();
+    renderFlips();
+    const profit = sellPrice - (f.buyPrice + (f.partsCost || 0));
+    showToast(`Sold #${id} (${fmtSigned(profit)})`);
+  });
+}
+
+async function deleteFlip(id) {
+  const idx = state.flips.findIndex(x => x.id === id);
+  if (idx < 0) return;
+  const removed = state.flips.splice(idx, 1)[0];
+  await api(`/api/flips/${id}`, { method: "DELETE" });
+  renderHeader();
+  renderFlips();
+  showToast(`Deleted #${removed.id} ${removed.name}`, () => {
+    state.flips.splice(idx, 0, removed);
+    renderHeader();
+    renderFlips();
+  });
+}
+
+function exportFlipsCsv() {
+  const rows = [["id","name","buy_price","parts_cost","sell_price","profit","bought_at","sold_at"]];
+  state.flips.forEach(f => {
+    const p = f.sellPrice != null ? (f.sellPrice - f.buyPrice - (f.partsCost || 0)).toFixed(2) : "";
+    rows.push([f.id, `"${(f.name || "").replace(/"/g, '""')}"`, f.buyPrice, f.partsCost || 0, f.sellPrice ?? "", p, f.boughtAt || "", f.soldAt || ""]);
+  });
+  downloadText("flips.csv", rows.map(r => r.join(",")).join("\n") + "\n");
+}
+
+// Settings, Blocklist, Hints, Filter Tester, Backup
+function onProviderChange() {
+  const prov = document.getElementById("setAiProvider").value;
+  document.getElementById("setAiModel").value = DEFAULT_MODELS[prov] || "";
+}
+
+async function saveSettings() {
+  state.status.postcode = document.getElementById("setPostcode").value.trim().toUpperCase();
+  state.status.pickupKm = Math.max(0, Number(document.getElementById("setPickupKm").value) || 0);
+  state.settings.language = document.getElementById("setLang").value;
+  state.settings.quietNightsEnabled = document.getElementById("setQuietNights").checked;
+  state.settings.nightStartHour = Number(document.getElementById("setNightStart").value) || 23;
+  state.settings.nightEndHour = Number(document.getElementById("setNightEnd").value) || 7;
+  state.settings.morningDigestEnabled = document.getElementById("setDigest").checked;
+  state.settings.skipLikelyBusinesses = document.getElementById("setSkipBiz").checked;
+  state.settings.skipHighDescriptionPrice = document.getElementById("setSkipDescPrice").checked;
+  state.settings.fastCategoryMode = document.getElementById("setFastCat").checked;
+  state.settings.enableTweakers = document.getElementById("setTweakers").checked;
+  state.settings.enableTweedehands = document.getElementById("setTweedehands").checked;
+  state.settings.enableKleinanzeigen = document.getElementById("setKleinanzeigen").checked;
+  state.settings.enableCoolblue = document.getElementById("setCoolblue").checked;
+  state.settings.enableVinted = document.getElementById("setVinted").checked;
+
+  state.settings.aiEnabled = document.getElementById("setAiEnabled").checked;
+  state.settings.aiProvider = document.getElementById("setAiProvider").value;
+  state.settings.aiModel = document.getElementById("setAiModel").value.trim();
+  state.settings.aiDailyLimit = Math.max(1, Number(document.getElementById("setAiLimit").value) || 30);
+  state.settings.aiAutoSkip = document.getElementById("setAiAutoSkip").checked;
+  const newKey = document.getElementById("setAiKey").value.trim();
+  if (newKey) { state.status.aiKeySet = true; document.getElementById("setAiKey").value = ""; }
+
+  await api("/api/settings", {
+    method: "POST",
+    body: JSON.stringify({ postcode: state.status.postcode, pickupKm: state.status.pickupKm, settings: state.settings, apiKey: newKey })
+  });
+  renderOverview();
+  renderSettings();
+  showToast("Settings saved");
+}
+
+async function addGlobalWord() {
+  const input = document.getElementById("newGlobalWord");
+  const words = input.value.split(",").map(w => w.trim().toLowerCase()).filter(Boolean);
+  if (!words.length) return;
+  for (const w of words) if (!state.blocklist.globalSkipWords.includes(w)) state.blocklist.globalSkipWords.push(w);
+  input.value = "";
+  await api("/api/blocklist/words", { method: "POST", body: JSON.stringify({ words }) });
+  renderSettings();
+  runFilterTest();
+  showToast("Added global skip word(s)");
+}
+async function removeGlobalWord(word) {
+  state.blocklist.globalSkipWords = state.blocklist.globalSkipWords.filter(w => w !== word);
+  await api(`/api/blocklist/words/${encodeURIComponent(word)}`, { method: "DELETE" });
+  renderSettings();
+  runFilterTest();
+}
+async function addBlockedSeller() {
+  const input = document.getElementById("newBlockedSeller");
+  const seller = input.value.trim();
+  if (!seller) return;
+  if (!state.blocklist.blockedSellers.includes(seller)) state.blocklist.blockedSellers.push(seller);
+  input.value = "";
+  await api("/api/blocklist/sellers", { method: "POST", body: JSON.stringify({ seller }) });
+  renderSettings();
+  showToast(`Blocked ${seller}`);
+}
+async function removeBlockedSeller(name) {
+  state.blocklist.blockedSellers = state.blocklist.blockedSellers.filter(s => s !== name);
+  await api(`/api/blocklist/sellers/${encodeURIComponent(name)}`, { method: "DELETE" });
+  renderSettings();
+}
+async function saveHints() {
+  state.hints = document.getElementById("hintsEditor").value;
+  await api("/api/hints", { method: "POST", body: JSON.stringify({ text: state.hints }) });
+  runFilterTest();
+  showToast("Saved hints.txt");
+}
+
+function runFilterTest() {
+  const raw = document.getElementById("testerText").value.trim();
+  const out = document.getElementById("testerOutput");
+  if (!raw) {
+    out.innerHTML = `<span style="color:var(--muted)">Type or paste a listing above to see skip words and repair hint matches live.</span>`;
+    return;
+  }
+
+  const lower = raw.toLowerCase();
+  const clauses = lower.split(/[.,!?\n\r;:]+/);
+  const negRe = /\b(?:geen|zonder)\s+(?:(?:enkele|enige|zichtbare|grote|diepe)\s+|[a-z0-9]+\s+of\s+)?$/;
+
+  const allSkip = [...new Set([...state.blocklist.globalSkipWords, "barst", "gebarsten", "strepen", "lijnen"])];
+  let matchedSkip = "";
+  for (const clause of clauses) {
+    for (const w of allSkip) {
+      let idx = clause.indexOf(w);
+      while (idx >= 0) {
+        if (!negRe.test(clause.slice(0, idx))) { matchedSkip = w; break; }
+        idx = clause.indexOf(w, idx + 1);
+      }
+      if (matchedSkip) break;
+    }
+    if (matchedSkip) break;
+  }
+
+  // Test repair hints from editor
+  let matchedHint = null;
+  const hintLines = (document.getElementById("hintsEditor").value || "").split("\n");
+  for (const line of hintLines) {
+    const t = line.trim();
+    if (!t || t.startsWith("#")) continue;
+    const parts = t.split(";");
+    if (parts.length < 2) continue;
+    const options = parts[0].toLowerCase().split(",").map(s => s.trim()).filter(Boolean);
+    const fits = options.some(opt => opt.split("+").every(p => {
+      const w = p.trim();
+      let idx = lower.indexOf(w);
+      while (idx >= 0) {
+        if (!negRe.test(lower.slice(0, idx))) return true;
+        idx = lower.indexOf(w, idx + 1);
+      }
+      return false;
+    }));
+    if (fits) { matchedHint = { tip: parts[1].trim(), q: (parts[2] || "").trim() }; break; }
+  }
+
+  const rows = [];
+  rows.push(matchedSkip
+    ? `<div><span class="badge badge-alert">SKIPPED</span> Matched skip word: <code class="mono">${esc(matchedSkip)}</code></div>`
+    : `<div><span class="badge badge-sent">PASS</span> No un-negated skip words triggered</div>`);
+  rows.push(matchedHint
+    ? `<div><span class="badge badge-blue">HINT</span> ${esc(matchedHint.tip)}${matchedHint.q ? ` <span style="color:var(--muted)">· Ask: "${esc(matchedHint.q)}"</span>` : ""}</div>`
+    : `<div style="color:var(--muted)">No repair hint matched</div>`);
+  out.innerHTML = rows.join("");
+}
+
+function downloadBackup() {
+  if (!isDemo) { window.location.href = "/api/backup"; return; }
+  downloadText("marktplaats-preview-state.json", JSON.stringify(state, null, 2));
+  showToast("Downloaded preview backup");
+}
+
+async function handleRestoreUpload(file) {
+  if (!file) return;
+  if (isDemo) {
+    showToast(`Preview mode: selected "${file.name}"`);
+    return;
+  }
+  const bytes = await file.arrayBuffer();
+  const res = await fetch("/api/restore", {
+    method: "POST",
+    headers: { "Content-Type": "application/octet-stream", "X-Filename": file.name },
+    body: bytes
+  });
+  if (res.ok) {
+    const live = await api("/api/state");
+    if (live) { state = live; renderAll(); }
+    showToast("Backup restored");
+  } else {
+    showToast("Restore failed: " + (await res.text()));
+  }
+}
+
+// Modal & Toast helpers
+let modalConfirmFn = null;
+function openModal(title, bodyHtml, onConfirm) {
+  document.getElementById("modalTitle").textContent = title;
+  document.getElementById("modalBody").innerHTML = bodyHtml;
+  modalConfirmFn = onConfirm;
+  const footer = document.getElementById("modalFooter");
+  footer.innerHTML = onConfirm
+    ? `<button class="btn btn-sm" onclick="closeModal()">Cancel</button><button class="btn btn-sm btn-primary" onclick="confirmModal()">Save</button>`
+    : `<button class="btn btn-sm" onclick="closeModal()">Close</button>`;
+  document.getElementById("modalBackdrop").classList.add("open");
+  const inp = document.querySelector("#modalBody input");
+  if (inp) setTimeout(() => inp.focus(), 30);
+}
+function confirmModal() {
+  const fn = modalConfirmFn;
+  closeModal();
+  if (fn) fn();
+}
+function closeModal() {
+  document.getElementById("modalBackdrop").classList.remove("open");
+  modalConfirmFn = null;
+}
+
+function showToast(text, onUndo = null) {
+  const el = document.getElementById("toast");
+  const undoBtn = document.getElementById("toastUndo");
+  document.getElementById("toastText").textContent = text;
+  undoCallback = onUndo;
+  undoBtn.style.display = onUndo ? "inline-flex" : "none";
+  el.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("show"), onUndo ? 6000 : 2800);
+}
+function runUndo() {
+  if (undoCallback) { const fn = undoCallback; undoCallback = null; fn(); }
+  document.getElementById("toast").classList.remove("show");
+}
+
+function downloadText(filename, text) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
+  a.download = filename;
+  a.click();
+}
+function fmtEuro(n) { const num = Number(n) || 0; return Number.isInteger(num) ? `€${num}` : `€${num.toFixed(2)}`; }
+function fmtSigned(n) { return n >= 0 ? `+${fmtEuro(n)}` : `-${fmtEuro(-n)}`; }
+function setSigned(id, val) {
+  const el = document.getElementById(id);
+  el.textContent = fmtSigned(val);
+  el.className = "stat-value " + (val >= 0 ? "pos" : "neg");
+}
+function esc(s) {
+  return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+}
+function escJs(s) {
+  return String(s ?? "").replace(/\\/g,"\\\\").replace(/'/g,"\\'").replace(/"/g,"&quot;");
+}
+
+init();
+</script>
+</body>
+</html>

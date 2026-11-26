@@ -17,6 +17,14 @@ publish/
 *.zip
 hints.txt
 history.txt
+settings.json
+blocklist.json
+watchlist.json
+flips.json
+stats.json
+ai_key.txt
+users/
+data/
 
 # Backups
 *.bak

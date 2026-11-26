@@ -1,0 +1,21 @@
+services:
+  marktplaats-notifier:
+    build: .
+    container_name: marktplaats-notifier
+    restart: unless-stopped
+    ports:
+      - "5050:5050"
+    environment:
+      - TZ=Europe/Amsterdam
+      - MARKTPLAATS_DATA_DIR=/data
+      - WEB_PORT=5050
+      # Optional: protect the web UI with a password on a shared LAN
+      # - WEB_PASSWORD=change-me
+      # Option A: fill these in for zero-file headless setup
+      # - TELEGRAM_BOT_TOKEN=123456789:ABCdef...
+      # - TELEGRAM_CHAT_ID=123456789
+      # - MARKTPLAATS_POSTCODE=1234AB
+      # - MARKTPLAATS_PICKUP_KM=10
+      # Option B: leave them commented out and place secrets.txt + searches.txt inside ./data/
+    volumes:
+      - ./data:/data

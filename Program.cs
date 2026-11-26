@@ -1,321 +1,518 @@
+using System.Globalization;
+using System.Net;
+using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using MarktplaatsNotifier;
-using System.Runtime.InteropServices;
+
+bool isHeadless = Console.IsInputRedirected;
 
 AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
 {
     Exception error = (Exception)e.ExceptionObject;
-    Console.WriteLine("Something went wrong: " + error.Message);
-    Console.WriteLine("Press Enter to close.");
-    Console.ReadLine();
+    BotLog.Write("Something went wrong: " + error.Message);
+    if (!isHeadless)
+    {
+        Console.WriteLine("Press Enter to close.");
+        Console.ReadLine();
+    }
 };
 
 void StopWithError(string message)
 {
-    Console.WriteLine(message);
-    Console.WriteLine("Press Enter to close.");
-    Console.ReadLine();
+    BotLog.Write(message);
+    if (!isHeadless)
+    {
+        Console.WriteLine("Press Enter to close.");
+        Console.ReadLine();
+    }
+
     Environment.Exit(1);
 }
 
-HttpClient client = new HttpClient();
-client.DefaultRequestHeaders.Add("User-Agent",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36");
-client.DefaultRequestHeaders.Add("Accept", "application/json, text/plain, */*");
-client.DefaultRequestHeaders.Add("Accept-Language", "nl-NL,nl;q=0.9,en;q=0.8");
-
-SearchList searchList = new SearchList();
-string loadError = searchList.Load();
-if (loadError != "")
+SocketsHttpHandler marktplaatsHandler = new SocketsHttpHandler
 {
-    StopWithError(loadError);
+    AutomaticDecompression = DecompressionMethods.All,
+    UseCookies = true,
+    CookieContainer = new CookieContainer(),
+    PooledConnectionLifetime = TimeSpan.FromMinutes(10)
+};
+
+HttpClient marktplaatsClient = new HttpClient(marktplaatsHandler)
+{
+    Timeout = TimeSpan.FromSeconds(25)
+};
+marktplaatsClient.DefaultRequestHeaders.Add("User-Agent",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36");
+marktplaatsClient.DefaultRequestHeaders.Add("Accept-Language", "nl-NL,nl;q=0.9,en;q=0.8");
+marktplaatsClient.DefaultRequestHeaders.Add("Referer", "https://www.marktplaats.nl/");
+
+HttpClient telegramClient = new HttpClient
+{
+    Timeout = TimeSpan.FromSeconds(25)
+};
+
+string secretsPath = AppFiles.PathFor("secrets.txt");
+long lastUpdateId = 0;
+
+string envToken = (Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN") ?? "").Trim();
+string envChatId = (Environment.GetEnvironmentVariable("TELEGRAM_CHAT_ID") ?? "").Trim();
+string envPostcode = (Environment.GetEnvironmentVariable("MARKTPLAATS_POSTCODE") ?? "").Trim().ToUpperInvariant().Replace(" ", "");
+string envPickupKm = (Environment.GetEnvironmentVariable("MARKTPLAATS_PICKUP_KM") ?? "").Trim();
+
+string token;
+string ownerChatId;
+string ownerPostcode;
+int ownerPickupKm;
+
+if (envToken != "" && envChatId != "" && envPostcode != "" && envPickupKm != "")
+{
+    token = envToken;
+    ownerChatId = envChatId;
+    ownerPostcode = envPostcode;
+    if (!int.TryParse(envPickupKm, out ownerPickupKm) || ownerPickupKm < 0)
+    {
+        StopWithError($"MARKTPLAATS_PICKUP_KM (\"{envPickupKm}\") is not a valid whole number (0 or higher).");
+    }
+
+    if (!File.Exists(secretsPath))
+    {
+        File.WriteAllLines(secretsPath, new[] { token, ownerChatId, ownerPostcode, ownerPickupKm.ToString(CultureInfo.InvariantCulture) });
+    }
+}
+else
+{
+    if (!File.Exists(secretsPath))
+    {
+        if (isHeadless)
+        {
+            StopWithError(
+                "No secrets.txt found and running headless. Mount secrets.txt in the data folder or set TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, MARKTPLAATS_POSTCODE, and MARKTPLAATS_PICKUP_KM.");
+        }
+
+        string newToken = "";
+        while (newToken == "")
+        {
+            Console.Write("Paste your bot token: ");
+            string input = (Console.ReadLine() ?? "").Trim();
+            if (input == "")
+            {
+                continue;
+            }
+
+            try
+            {
+                await telegramClient.GetStringAsync($"https://api.telegram.org/bot{input}/getMe");
+                newToken = input;
+            }
+            catch
+            {
+                Console.WriteLine("That token doesn't work (or there's no internet). Check it and try again.");
+            }
+        }
+
+        Console.WriteLine("Now open your bot in Telegram and send it any message (like 'hi').");
+        Console.WriteLine("Waiting for your message...");
+
+        string newChatId = "";
+        while (newChatId == "")
+        {
+            try
+            {
+                string updatesJson =
+                    await telegramClient.GetStringAsync($"https://api.telegram.org/bot{newToken}/getUpdates");
+                using JsonDocument updates = JsonDocument.Parse(updatesJson);
+
+                foreach (JsonElement update in updates.RootElement.GetProperty("result").EnumerateArray())
+                {
+                    lastUpdateId = update.GetProperty("update_id").GetInt64();
+                    if (update.TryGetProperty("message", out JsonElement msg))
+                    {
+                        newChatId = msg.GetProperty("chat").GetProperty("id").GetInt64().ToString();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Waiting for Telegram failed ({ex.Message}), retrying...");
+            }
+
+            if (newChatId == "")
+            {
+                await Task.Delay(2000);
+            }
+        }
+
+        File.WriteAllLines(secretsPath, new[] { newToken, newChatId });
+        Console.Clear();
+        Console.WriteLine("Setup done! You won't be asked again.");
+    }
+
+    string[] secrets = File.ReadAllLines(secretsPath);
+    if (secrets.Length < 2)
+    {
+        StopWithError("secrets.txt is damaged. Delete it and start the app again to redo the setup.");
+    }
+
+    token = secrets[0].Trim();
+    ownerChatId = secrets[1].Trim();
+    if (token == "" || ownerChatId == "")
+    {
+        StopWithError("secrets.txt has an empty token or chat ID. Delete it and start the app again.");
+    }
+
+    if (secrets.Length < 4)
+    {
+        if (isHeadless)
+        {
+            StopWithError("secrets.txt is missing postcode/pickup distance (lines 3 and 4).");
+        }
+
+        string newPostcode = "";
+        while (newPostcode == "")
+        {
+            Console.Write("Your postcode (like 1234AB): ");
+            string input = (Console.ReadLine() ?? "").Trim().ToUpperInvariant().Replace(" ", "");
+
+            if (input.Length == 6 && int.TryParse(input.Substring(0, 4), out _) && char.IsLetter(input[4]) &&
+                char.IsLetter(input[5]))
+            {
+                newPostcode = input;
+            }
+            else
+            {
+                Console.WriteLine("That's not a Dutch postcode. Use 4 numbers and 2 letters, like 1234AB.");
+            }
+        }
+
+        int newPickupKm = -1;
+        while (newPickupKm < 0)
+        {
+            Console.Write("How many km will you travel to pick something up? (0 = shipping only): ");
+            string input = (Console.ReadLine() ?? "").Trim();
+            if (int.TryParse(input, out int km) && km >= 0)
+            {
+                newPickupKm = km;
+            }
+            else
+            {
+                Console.WriteLine("Type a whole number, like 5.");
+            }
+        }
+
+        File.WriteAllLines(secretsPath, new[] { token, ownerChatId, newPostcode, newPickupKm.ToString(CultureInfo.InvariantCulture) });
+        secrets = File.ReadAllLines(secretsPath);
+    }
+
+    ownerPostcode = secrets[2].Trim().ToUpperInvariant().Replace(" ", "");
+    if (!int.TryParse(secrets[3].Trim(), out ownerPickupKm) || ownerPickupKm < 0)
+    {
+        StopWithError(
+            $"Line 4 in secrets.txt (\"{secrets[3].Trim()}\") is not a valid pickup distance. Use a whole number like 5, or delete secrets.txt.");
+    }
 }
 
 RepairHints hints = new RepairHints();
 hints.Load();
-ListingHistory history = new ListingHistory();
-history.Load();
-using PosixSignalRegistration ctrlC = PosixSignalRegistration.Create(PosixSignal.SIGINT, context => history.Save());
-using PosixSignalRegistration stop = PosixSignalRegistration.Create(PosixSignal.SIGTERM, context => history.Save());
 
-if (!File.Exists("secrets.txt"))
+RequestLimiter limiter = new RequestLimiter();
+TweakersSource tweakersSource = new TweakersSource();
+TweedehandsSource tweedehandsSource = new TweedehandsSource();
+KleinanzeigenSource kleinanzeigenSource = new KleinanzeigenSource();
+CoolblueSource coolblueSource = new CoolblueSource();
+VintedSource vintedSource = new VintedSource();
+DateTime skipDetailsUntil = DateTime.MinValue;
+DateTime lastDetailsFetch = DateTime.MinValue;
+DateTime lastWatchFetch = DateTime.MinValue;
+DateTime startedAt = DateTime.Now;
+int errorsInARow = 0;
+
+Dictionary<int, string> categoryNames = new Dictionary<int, string>();
+Dictionary<string, (DateTime FetchedAt, string Json)> searchCache =
+    new Dictionary<string, (DateTime, string)>(StringComparer.OrdinalIgnoreCase);
+Dictionary<string, long> newestIdPerCategory = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+Dictionary<string, DateTime> lastCategoryCheck = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+
+UserSession owner = new UserSession(
+    ownerChatId,
+    isOwner: true,
+    name: "Owner",
+    dataDir: AppFiles.DataDirectory,
+    token: token,
+    postcode: ownerPostcode,
+    pickupKm: ownerPickupKm,
+    onboardingComplete: true,
+    telegramClient: telegramClient,
+    marktplaatsClient: marktplaatsClient);
+
+string ownerLoadError = owner.LoadData();
+if (ownerLoadError != "")
 {
-    string newToken = "";
-    while (newToken == "")
+    StopWithError(ownerLoadError);
+}
+
+string BuildStatusText(UserSession user)
+{
+    TimeSpan running = DateTime.Now - startedAt;
+    string state = user.Paused
+        ? (user.PausedUntil.HasValue ? $"⏰ snoozed until {user.PausedUntil.Value:HH:mm}" : "⏸️ paused")
+        : "▶️ running";
+    string detailsStatus = DateTime.Now < skipDetailsUntil
+        ? $"\n⚠️ Extra listing details paused until {skipDetailsUntil:HH:mm}"
+        : "";
+    string aiStatus = user.Settings.AiEnabled
+        ? $"\n🤖 AI: {user.Settings.AiProvider}/{user.Settings.AiModel} ({user.AiGrader.CallsToday}/{user.Settings.AiDailyLimit} today)"
+        : "";
+    return
+        $"🤖 Status: {state}\n" +
+        $"⏱️ Running for {(int)running.TotalHours} h {running.Minutes} min\n" +
+        $"🔎 {user.SearchList.Rules.Count} searches, {user.ChecksDone} checks done\n" +
+        $"📨 {user.ListingsSent} listings sent · 👀 {user.Watchlist.Count} watched\n" +
+        $"📚 {user.History.Count} listings in history\n" +
+        $"🐢 {limiter.DelayMs} ms between requests" +
+        aiStatus +
+        detailsStatus;
+}
+
+UserManager userManager = null!;
+
+async Task<Listing?> FetchSingleListingForWatch(string url, string itemId)
+{
+    Listing ad = new Listing { Id = itemId, Link = url };
+    await AddPageDetails(ad, alsoParseTitleAndPrice: true);
+    return ad;
+}
+
+async Task<string> CheckSearchNow(UserSession user, SearchRule rule)
+{
+    try
     {
-        Console.Write("Paste your bot token: ");
-        string input = Console.ReadLine().Trim();
-
-        try
+        string url =
+            $"https://www.marktplaats.nl/lrp/api/search?query={Uri.EscapeDataString(rule.Query)}&limit=30&sortBy=SORT_INDEX&sortOrder=DECREASING&postcode={Uri.EscapeDataString(user.Postcode)}";
+        if (rule.Category != "")
         {
-            await client.GetStringAsync($"https://api.telegram.org/bot{input}/getMe");
-            newToken = input;
+            url += $"&l1CategoryId={rule.Category}";
         }
-        catch
+
+        string cacheKey = $"{rule.Query.ToLowerInvariant()}|{rule.Category}|{user.Postcode}";
+        List<Listing> ads = await FetchListings(url, cacheKey, bypassCache: true);
+        string[] globalSkip = user.Blocklist.GetGlobalSkipWordsArray();
+
+        List<Listing> matches = new List<Listing>();
+        double cheapestOverall = double.MaxValue;
+
+        foreach (Listing ad in ads)
         {
-            Console.WriteLine("That token doesn't work (or there's no internet). Check it and try again.");
-        }
-    }
-
-    Console.WriteLine("Now open your bot in Telegram and send it any message (like 'hi').");
-    Console.WriteLine("Waiting for your message...");
-
-    string newChatId = "";
-    while (newChatId == "")
-    {
-        string updatesJson = await client.GetStringAsync($"https://api.telegram.org/bot{newToken}/getUpdates");
-        using JsonDocument updates = JsonDocument.Parse(updatesJson);
-
-        foreach (JsonElement update in updates.RootElement.GetProperty("result").EnumerateArray())
-        {
-            if (update.TryGetProperty("message", out JsonElement msg))
+            if (rule.SubCategory != 0 && ad.CategoryId != rule.SubCategory)
             {
-                newChatId = msg.GetProperty("chat").GetProperty("id").GetInt64().ToString();
+                continue;
+            }
+
+            if (user.Blocklist.IsSellerBlocked(ad.SellerName) || Filters.IsNotForSale(ad.Title))
+            {
+                continue;
+            }
+
+            string text = ad.Title + ". " + ad.Description;
+            if (Filters.FindBadFault(text, rule.SkipWords) != "" || Filters.FindBadFault(text, globalSkip) != "")
+            {
+                continue;
+            }
+
+            bool isNearby = ad.DistanceKm >= 0 && ad.DistanceKm <= user.PickupKm;
+            if (!ad.CanShip && !isNearby)
+            {
+                continue;
+            }
+
+            if (ad.Price > 0 && ad.Price < cheapestOverall)
+            {
+                cheapestOverall = ad.Price;
+            }
+
+            if (ad.Price <= rule.MaxPrice)
+            {
+                matches.Add(ad);
             }
         }
 
-        await Task.Delay(2000);
-    }
+        StringBuilder sb = new StringBuilder();
+        sb.AppendLine($"⚡ <b>Live check: {WebUtility.HtmlEncode(rule.Query)}</b> (max €{rule.MaxPrice})");
+        sb.AppendLine($"Checked {ads.Count} listings → <b>{matches.Count}</b> match right now.\n");
 
-    File.WriteAllLines("secrets.txt", new string[] { newToken, newChatId });
-    Console.Clear();
-    Console.WriteLine("Setup done! You won't be asked again.");
-}
-
-string[] secrets = File.ReadAllLines("secrets.txt");
-if (secrets.Length < 2)
-{
-    StopWithError("secrets.txt is damaged. Delete it and start the app again to redo the setup.");
-}
-
-string token = secrets[0];
-string chatId = secrets[1];
-if (secrets.Length < 4)
-{
-    string newPostcode = "";
-    while (newPostcode == "")
-    {
-        Console.Write("Your postcode (like 1234AB): ");
-        string input = Console.ReadLine().Trim().ToUpper().Replace(" ", "");
-
-        if (input.Length == 6 && int.TryParse(input.Substring(0, 4), out _) && char.IsLetter(input[4]) &&
-            char.IsLetter(input[5]))
+        if (matches.Count == 0)
         {
-            newPostcode = input;
+            if (cheapestOverall < double.MaxValue)
+            {
+                sb.Append($"💡 Cheapest matching listing right now is <b>{Listing.FormatEuro(cheapestOverall)}</b>.");
+            }
+            else
+            {
+                sb.Append("💡 No priced listings matched your filters right now.");
+            }
+
+            return sb.ToString();
         }
-        else
+
+        foreach (Listing ad in matches.Take(4))
         {
-            Console.WriteLine("That's not a Dutch postcode. Use 4 numbers and 2 letters, like 1234AB.");
+            string fullUrl = ad.Link.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+                ? ad.Link
+                : "https://www.marktplaats.nl" + ad.Link;
+            sb.AppendLine($"• <a href=\"{WebUtility.HtmlEncode(fullUrl)}\">{WebUtility.HtmlEncode(ad.Title)}</a> — {WebUtility.HtmlEncode(ad.PriceText)} ({WebUtility.HtmlEncode(ad.City)})");
         }
+
+        return sb.ToString().TrimEnd();
     }
-
-    int newPickupKm = -1;
-    while (newPickupKm < 0)
+    catch (Exception ex)
     {
-        Console.Write("How many km will you travel to pick something up? (0 = shipping only): ");
-        if (int.TryParse(Console.ReadLine().Trim(), out int km) && km >= 0)
-        {
-            newPickupKm = km;
-        }
-        else
-        {
-            Console.WriteLine("Type a whole number, like 5.");
-        }
-    }
-
-    File.WriteAllLines("secrets.txt", new string[] { token, chatId, newPostcode, newPickupKm.ToString() });
-    secrets = File.ReadAllLines("secrets.txt");
-}
-
-string postcode = secrets[2];
-int pickupKm = int.Parse(secrets[3]);
-Telegram telegram = new Telegram(client, token, chatId);
-
-
-HashSet<string> seenIds = new HashSet<string>();
-if (File.Exists("seen.txt"))
-{
-    string[] savedIds = File.ReadAllLines("seen.txt");
-    if (savedIds.Length > 50000)
-    {
-        savedIds = savedIds[^50000..];
-        File.WriteAllLines("seen.txt", savedIds);
-    }
-
-    foreach (string id in savedIds)
-    {
-        seenIds.Add(id);
+        return $"❌ Live check failed: {WebUtility.HtmlEncode(ex.Message)}";
     }
 }
 
-
-long lastUpdateId = 0;
-RequestLimiter limiter = new RequestLimiter();
-SearchScheduler scheduler = new SearchScheduler();
-bool paused = false;
-DateTime skipDetailsUntil = DateTime.MinValue;
-DateTime startedAt = DateTime.Now;
-int checksDone = 0;
-int listingsSent = 0;
-
-
-string addStep = "";
-string pendingSearch = "";
-int pendingPrice = 0;
-
-
-Dictionary<string, string> categoryButtons = new Dictionary<string, string>
+async Task<PriceCheckResult> LookupMarketPrice(UserSession user, string query)
 {
-    { "💻 Computers en Software", "322" },
-    { "📺 Audio, Tv en Foto", "31" },
-    { "🎮 Spelcomputers en Games", "356" },
-    { "📱 Telecommunicatie", "820" },
-    { "🚗 Auto-onderdelen", "2600" },
-    { "🚲 Fietsen en Brommers", "445" },
-    { "🧺 Witgoed en Apparatuur", "537" },
-    { "🏠 Huis en Inrichting", "504" },
-    { "🔎 All of Marktplaats", "" }
-};
+    List<double> livePrices = new List<double>();
+    try
+    {
+        string url =
+            $"https://www.marktplaats.nl/lrp/api/search?query={Uri.EscapeDataString(query)}&limit=30&sortBy=SORT_INDEX&sortOrder=DECREASING&postcode={Uri.EscapeDataString(user.Postcode)}";
+        string cacheKey = $"price|{query.ToLowerInvariant()}|{user.Postcode}";
+        List<Listing> ads = await FetchListings(url, cacheKey);
+        foreach (Listing ad in ads)
+        {
+            if (ad.Price > 0 && !Filters.IsNotForSale(ad.Title))
+            {
+                livePrices.Add(ad.Price);
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        BotLog.Write($"Price check fetch failed for '{query}': {ex.Message}");
+    }
 
+    List<double> historyPrices = user.History.GetPricesForQuery(query);
+    return PriceLookup.Compute(query, livePrices, historyPrices);
+}
+
+userManager = new UserManager(
+    owner,
+    token,
+    telegramClient,
+    marktplaatsClient,
+    wireSession: session =>
+    {
+        session.Commands = new CommandHandler(
+            session,
+            userManager,
+            categoryNames,
+            BuildStatusText,
+            FetchSingleListingForWatch,
+            CheckSearchNow,
+            LookupMarketPrice,
+            reloadHints: () => hints.Load());
+    });
+
+userManager.LoadInvitedUsers();
+
+using WebDashboard webDashboard = new WebDashboard(owner, hints, limiter, startedAt, CheckSearchNow, LookupMarketPrice);
+webDashboard.Start();
+BotLog.OnWrite += () => webDashboard.BroadcastUpdate();
+
+using PosixSignalRegistration ctrlC = PosixSignalRegistration.Create(PosixSignal.SIGINT, _ => userManager.SaveAllUsers());
+using PosixSignalRegistration stop = PosixSignalRegistration.Create(PosixSignal.SIGTERM, _ => userManager.SaveAllUsers());
+using PosixSignalRegistration hangup = PosixSignalRegistration.Create(PosixSignal.SIGHUP, _ => userManager.SaveAllUsers());
+AppDomain.CurrentDomain.ProcessExit += (_, _) => userManager.SaveAllUsers();
 
 try
 {
-    List<object> commands = new List<object>
-    {
-        new { command = "add", description = "Add a search" },
-        new { command = "list", description = "Show your searches" },
-        new { command = "remove", description = "Remove a search" },
-        new { command = "cancel", description = "Stop adding a search" },
-        new { command = "pause", description = "Pause searching" },
-        new { command = "resume", description = "Start searching again" },
-        new { command = "status", description = "Show how the bot is doing" },
-        new { command = "help", description = "Show all commands" }
-    };
-    string commandsJson = JsonSerializer.Serialize(commands);
-    await client.GetStringAsync(
-        $"https://api.telegram.org/bot{token}/setMyCommands?commands={Uri.EscapeDataString(commandsJson)}");
+    await owner.Telegram.SetCommands(CommandHandler.GetMenuCommands());
 
-    if (searchList.Prices.Count == 0)
+    if (lastUpdateId == 0)
     {
-        await telegram.SendText("The bot is running, Send /add to add your first search.");
+        string pendingJson = await owner.Telegram.GetUpdatesJson(0);
+        using JsonDocument pendingDoc = JsonDocument.Parse(pendingJson);
+        foreach (JsonElement update in pendingDoc.RootElement.GetProperty("result").EnumerateArray())
+        {
+            lastUpdateId = update.GetProperty("update_id").GetInt64();
+        }
+    }
+
+    if (owner.SearchList.Rules.Count == 0)
+    {
+        await owner.Telegram.SendText("The bot is running. Send /menu or paste a Marktplaats URL to get started.");
     }
     else
     {
-        await telegram.SendText($"✅ Bot started, watching {searchList.Prices.Count} searches.");
+        string usersNote = userManager.AllUsers.Count > 1 ? $" ({userManager.AllUsers.Count} users)" : "";
+        await owner.Telegram.SendText($"✅ Bot started, watching {owner.SearchList.Rules.Count} searches{usersNote}. Send /menu for options.");
     }
 }
 catch (Exception ex)
 {
-    Console.WriteLine($"Couldn't reach Telegram at startup: {ex.Message}");
+    BotLog.Write($"Couldn't reach Telegram at startup: {ex.Message}");
 }
 
-List<string> labels = categoryButtons.Keys.ToList();
-List<List<object>> rows = new List<List<object>>();
-for (int i = 0; i < labels.Count; i += 2)
-{
-    List<object> row = new List<object>();
-    row.Add(new { text = labels[i] });
-    if (i + 1 < labels.Count)
-    {
-        row.Add(new { text = labels[i + 1] });
-    }
+BotLog.Write($"Data folder: {AppFiles.DataDirectory}");
+BotLog.Write($"Watching {owner.SearchList.Rules.Count} searches for owner ({userManager.AllUsers.Count} total user(s)).");
 
-    rows.Add(row);
-}
-
-string categoryKeyboard =
-    JsonSerializer.Serialize(new { keyboard = rows, one_time_keyboard = true, resize_keyboard = true });
-string removeKeyboard = "{\"remove_keyboard\":true}";
-
-async Task StartAdd(string searchText)
-{
-    if (searchList.Prices.ContainsKey(searchText))
-    {
-        addStep = "";
-        await telegram.SendText($"⚠️ \"{searchText}\" is already in your list.");
-        return;
-    }
-
-    pendingSearch = searchText;
-    addStep = "price";
-    await telegram.SendText($"💶 What's the max price for \"{searchText}\"?\nJust the number, like 140. (or /cancel)");
-}
-
-async Task HandleAddStep(string text)
-{
-    if (addStep == "search")
-    {
-        await StartAdd(text);
-    }
-    else if (addStep == "price")
-    {
-        string priceInput = text.Replace("€", "").Trim();
-        if (!int.TryParse(priceInput, out int price))
-        {
-            await telegram.SendText("❌ Send just a number, like 140. (or /cancel)");
-            return;
-        }
-
-        pendingPrice = price;
-        addStep = "category";
-        await telegram.SendText("📂 Which category? Tap a button, or send a category number.", categoryKeyboard);
-    }
-    else if (addStep == "category")
-    {
-        string category;
-        if (categoryButtons.ContainsKey(text))
-        {
-            category = categoryButtons[text];
-        }
-        else if (int.TryParse(text, out _))
-        {
-            category = text;
-        }
-        else
-        {
-            await telegram.SendText("❌ Tap one of the buttons, or send a category number. (or /cancel)",
-                categoryKeyboard);
-            return;
-        }
-
-        string line = $"{pendingSearch};{pendingPrice}";
-        if (category != "")
-        {
-            line += $";{category}";
-        }
-
-        addStep = "";
-        await telegram.SendText(searchList.Add(line), removeKeyboard);
-    }
-}
-
-
-string helpText = "🤖 Commands:\n\n" +
-                  "/add - add a search, the bot asks you the price and category\n" +
-                  "   quick version: /add rtx 3070;140;322\n\n" +
-                  "/remove search\n   example: /remove rtx 3070\n\n" +
-                  "/list - show all your searches\n" +
-                  "/cancel - stop adding a search\n" +
-                  "/pause - pause searching\n" +
-                  "/resume - start searching again\n" +
-                  "/status - show how the bot is doing\n" +
-                  "/help - show this message";
-
-async Task CheckCommands()
+async Task PollTelegramUpdates()
 {
     try
     {
-        string updatesJson =
-            await client.GetStringAsync($"https://api.telegram.org/bot{token}/getUpdates?offset={lastUpdateId + 1}");
+        string updatesJson = await owner.Telegram.GetUpdatesJson(lastUpdateId + 1);
         using JsonDocument updates = JsonDocument.Parse(updatesJson);
 
         foreach (JsonElement update in updates.RootElement.GetProperty("result").EnumerateArray())
         {
             lastUpdateId = update.GetProperty("update_id").GetInt64();
 
+            if (update.TryGetProperty("callback_query", out JsonElement callback))
+            {
+                string callbackId = callback.TryGetProperty("id", out JsonElement cbIdEl) ? cbIdEl.GetString() ?? "" : "";
+                string data = callback.TryGetProperty("data", out JsonElement dataEl) ? dataEl.GetString() ?? "" : "";
+                if (!callback.TryGetProperty("message", out JsonElement cbMsg))
+                {
+                    await owner.Telegram.AnswerCallbackQuery(callbackId);
+                    continue;
+                }
+
+                string fromChat = cbMsg.GetProperty("chat").GetProperty("id").GetInt64().ToString();
+                long messageId = cbMsg.GetProperty("message_id").GetInt64();
+
+                UserSession? cbUser = userManager.GetByChatId(fromChat);
+                if (cbUser?.Commands != null)
+                {
+                    await cbUser.Commands.HandleCallback(callbackId, messageId, data);
+                }
+                else
+                {
+                    await owner.Telegram.AnswerCallbackQuery(callbackId);
+                }
+
+                continue;
+            }
+
             if (!update.TryGetProperty("message", out JsonElement msg))
             {
+                continue;
+            }
+
+            string msgChatId = msg.GetProperty("chat").GetProperty("id").GetInt64().ToString();
+            UserSession? user = userManager.GetByChatId(msgChatId);
+
+            // Handle uploaded .zip backup or searches.txt documents
+            if (msg.TryGetProperty("document", out JsonElement docEl) && user?.Commands != null)
+            {
+                string fileId = docEl.TryGetProperty("file_id", out JsonElement fidEl) ? fidEl.GetString() ?? "" : "";
+                string fileName = docEl.TryGetProperty("file_name", out JsonElement fnameEl) ? fnameEl.GetString() ?? "" : "";
+                if (fileId != "" && fileName != "")
+                {
+                    await user.Commands.HandleDocument(fileId, fileName);
+                }
+
                 continue;
             }
 
@@ -324,279 +521,681 @@ async Task CheckCommands()
                 continue;
             }
 
-
-            string fromChat = msg.GetProperty("chat").GetProperty("id").GetInt64().ToString();
-            if (fromChat != chatId)
+            string text = (textElement.GetString() ?? "").Trim();
+            if (text == "")
             {
                 continue;
             }
 
-            string text = textElement.GetString().Trim();
-
-
-            if (text.StartsWith("/"))
+            long? replyToId = null;
+            if (msg.TryGetProperty("reply_to_message", out JsonElement replyEl) &&
+                replyEl.TryGetProperty("message_id", out JsonElement replyIdEl) &&
+                replyIdEl.ValueKind == JsonValueKind.Number &&
+                replyIdEl.TryGetInt64(out long parsedReplyId))
             {
-                addStep = "";
+                replyToId = parsedReplyId;
             }
-            else if (addStep != "")
+
+            if (user?.Commands != null)
             {
-                await HandleAddStep(text);
+                await user.Commands.HandleMessage(text, replyToId);
                 continue;
             }
 
-            if (text == "/cancel")
+            if (text.StartsWith("/join ", StringComparison.OrdinalIgnoreCase))
             {
-                await telegram.SendText("👍 Cancelled.", removeKeyboard);
-            }
-            else if (text == "/add" || text.StartsWith("/add "))
-            {
-                string rest = text.Substring(4).Trim();
-                if (rest.Contains(";"))
+                string code = text.Substring(6).Trim();
+                string displayName = "";
+                if (msg.TryGetProperty("from", out JsonElement fromEl) &&
+                    fromEl.TryGetProperty("first_name", out JsonElement firstNameEl))
                 {
-                    await telegram.SendText(searchList.Add(rest));
+                    displayName = firstNameEl.GetString() ?? "";
                 }
-                else if (rest == "")
+
+                if (userManager.TryRedeemInvite(code, msgChatId, displayName, out UserSession? created, out string joinMsg))
                 {
-                    addStep = "search";
-                    await telegram.SendText("🔎 What do you want to search for? (or /cancel)");
+                    await created!.Commands!.StartOnboarding();
+                    await owner.Telegram.SendText($"👋 New user joined: {created.Name} ({created.ChatId}).", silent: true);
                 }
                 else
                 {
-                    await StartAdd(rest);
+                    Telegram guestTelegram = new Telegram(telegramClient, token, msgChatId);
+                    await guestTelegram.SendText(joinMsg);
                 }
             }
-            else if (text == "/remove")
+            else if (text.Equals("/start", StringComparison.OrdinalIgnoreCase))
             {
-                await telegram.SendText("Type the search after /remove, like: /remove rtx 3070\n\n" +
-                                        searchList.ListText());
-            }
-            else if (text.StartsWith("/remove "))
-            {
-                await telegram.SendText(searchList.Remove(text.Substring(8).Trim()));
-            }
-            else if (text == "/list")
-            {
-                await telegram.SendText(searchList.ListText());
-            }
-            else if (text == "/pause")
-            {
-                paused = true;
-                await telegram.SendText("⏸️ Paused. Send /resume to start searching again.");
-            }
-            else if (text == "/resume")
-            {
-                paused = false;
-                await telegram.SendText("▶️ Searching again.");
-            }
-            else if (text == "/status")
-            {
-                TimeSpan running = DateTime.Now - startedAt;
-                string state = paused ? "⏸️ paused" : "▶️ running";
-                await telegram.SendText(
-                    $"🤖 Status: {state}\n" +
-                    $"⏱️ Running for {(int)running.TotalHours} h {running.Minutes} min\n" +
-                    $"🔎 {searchList.Prices.Count} searches, {checksDone} checks done\n" +
-                    $"📨 {listingsSent} listings sent\n" +
-                    $"🐢 {limiter.DelayMs} ms between requests");
-            }
-            else if (text == "/help" || text == "/start")
-            {
-                await telegram.SendText(helpText);
+                Telegram guestTelegram = new Telegram(telegramClient, token, msgChatId);
+                await guestTelegram.SendText("🔒 This is a private Marktplaats bot. Ask the owner for an invite code, then send /join CODE.");
             }
         }
     }
     catch (Exception ex)
     {
-        Console.WriteLine($"Error while checking commands: {ex.Message}");
+        BotLog.Write($"Error while checking commands: {ex.Message}");
     }
 }
 
-int errorsInARow = 0;
-
-bool IsNew(string itemId)
+async Task CheckAutoReload()
 {
-    if (seenIds.Contains(itemId))
+    try
     {
-        return false;
-    }
+        foreach (UserSession user in userManager.AllUsers)
+        {
+            if (user.SearchList.ReloadIfChanged(out string reloadError, out List<string> removedKeys))
+            {
+                if (reloadError != "")
+                {
+                    BotLog.Write($"Couldn't reload searches.txt for {user.Name}: {reloadError}");
+                    await user.Telegram.SendText($"⚠️ Couldn't reload searches.txt:\n{reloadError}\n\nKeeping previous searches.");
+                }
+                else
+                {
+                    foreach (string key in removedKeys)
+                    {
+                        user.NewestIdPerSearch.Remove(key);
+                        user.Scheduler.Remove(key);
+                        user.Stats.Remove(key);
+                    }
 
-    seenIds.Add(itemId);
-    File.AppendAllText("seen.txt", itemId + "\n");
-    return true;
+                    string msg = $"🔄 Reloaded searches.txt ({user.SearchList.Rules.Count} searches).";
+                    BotLog.Write(msg);
+                    await user.Telegram.SendText(msg, silent: true);
+                }
+            }
+        }
+
+        if (hints.ReloadIfChanged())
+        {
+            string msg = $"🔄 Reloaded hints.txt ({hints.Count} repair hints).";
+            BotLog.Write(msg);
+            await owner.Telegram.SendText(msg, silent: true);
+        }
+    }
+    catch (Exception ex)
+    {
+        BotLog.Write($"Auto-reload check failed: {ex.Message}");
+    }
 }
 
-
-Dictionary<int, string> categoryNames = new Dictionary<int, string>();
-
-async Task<List<Listing>> FetchListings(string url)
+async Task CheckPeriodicTasks()
 {
-    string json = await client.GetStringAsync(url);
-    if (errorsInARow >= 5)
+    foreach (UserSession user in userManager.AllUsers)
     {
         try
         {
-            await telegram.SendText("✅ Back to normal, searches work again.");
+            // Automatically end timed snooze when it expires
+            if (user.Paused && user.PausedUntil.HasValue && DateTime.Now >= user.PausedUntil.Value)
+            {
+                user.Paused = false;
+                user.PausedUntil = null;
+                await user.Telegram.SendText(
+                    user.Settings.IsDutch ? "▶️ Snooze voorbij, zoeken is weer gestart." : "▶️ Snooze over, searching again.",
+                    silent: true);
+            }
+
+            string? morningDigest = user.Digest.TryBuildMorningDigestHtml(user.Settings);
+            if (morningDigest != null)
+            {
+                await user.Telegram.SendText(morningDigest, parseMode: "HTML");
+                BotLog.Write($"Sent morning digest to {user.Name}.");
+            }
+
+            if (DateTime.Now - user.LastHeartbeat >= TimeSpan.FromDays(7))
+            {
+                int checksThisWeek = user.ChecksDone - user.ChecksAtLastHeartbeat;
+                user.ChecksAtLastHeartbeat = user.ChecksDone;
+                user.LastHeartbeat = DateTime.Now;
+                await user.Telegram.SendText(
+                    $"💚 Still running ({checksThisWeek} checks this week, {user.SearchList.Rules.Count} searches).",
+                    silent: true);
+            }
         }
-        catch
+        catch (Exception ex)
         {
+            BotLog.Write($"Periodic task error ({user.Name}): {ex.Message}");
         }
     }
+}
 
-    errorsInARow = 0;
-    limiter.Success();
+async Task DelayWithCommands(int totalMs)
+{
+    int remaining = totalMs;
+    while (remaining > 0)
+    {
+        int slice = Math.Min(remaining, 2000);
+        await Task.Delay(slice);
+        remaining -= slice;
+        if (remaining > 0)
+        {
+            await PollTelegramUpdates();
+        }
+    }
+}
+
+async Task<List<Listing>> FetchListings(string url, string cacheKey, bool bypassCache = false)
+{
+    string json;
+    if (!bypassCache &&
+        searchCache.TryGetValue(cacheKey, out var cached) &&
+        DateTime.Now - cached.FetchedAt < TimeSpan.FromSeconds(45))
+    {
+        json = cached.Json;
+    }
+    else
+    {
+        using HttpRequestMessage searchReq = new HttpRequestMessage(HttpMethod.Get, url);
+        searchReq.Headers.TryAddWithoutValidation("Accept", "application/json, text/plain, */*");
+        searchReq.Headers.TryAddWithoutValidation("Sec-Fetch-Dest", "empty");
+        searchReq.Headers.TryAddWithoutValidation("Sec-Fetch-Mode", "cors");
+        searchReq.Headers.TryAddWithoutValidation("Sec-Fetch-Site", "same-origin");
+
+        using HttpResponseMessage searchResp = await marktplaatsClient.SendAsync(searchReq);
+        searchResp.EnsureSuccessStatusCode();
+        json = await searchResp.Content.ReadAsStringAsync();
+
+        if (errorsInARow >= 5)
+        {
+            try
+            {
+                await owner.Telegram.SendText("✅ Back to normal, searches work again.");
+            }
+            catch
+            {
+            }
+        }
+
+        errorsInARow = 0;
+        limiter.Success();
+        searchCache[cacheKey] = (DateTime.Now, json);
+        if (searchCache.Count > 200)
+        {
+            DateTime expire = DateTime.Now.AddSeconds(-45);
+            foreach (string k in searchCache.Where(kv => kv.Value.FetchedAt < expire).Select(kv => kv.Key).ToList())
+            {
+                searchCache.Remove(k);
+            }
+        }
+    }
 
     List<Listing> ads = new List<Listing>();
     using JsonDocument doc = JsonDocument.Parse(json);
-    if (doc.RootElement.TryGetProperty("searchCategoryOptions", out JsonElement options))
+    if (doc.RootElement.TryGetProperty("searchCategoryOptions", out JsonElement options) &&
+        options.ValueKind == JsonValueKind.Array)
     {
         foreach (JsonElement option in options.EnumerateArray())
         {
-            categoryNames[option.GetProperty("id").GetInt32()] = option.GetProperty("fullName").GetString() ?? "";
+            if (option.TryGetProperty("id", out JsonElement idEl) &&
+                idEl.ValueKind == JsonValueKind.Number &&
+                idEl.TryGetInt32(out int catId))
+            {
+                string fullName = option.TryGetProperty("fullName", out JsonElement nameEl)
+                    ? nameEl.GetString() ?? ""
+                    : "";
+                categoryNames[catId] = fullName;
+            }
         }
     }
 
-    foreach (JsonElement listing in doc.RootElement.GetProperty("listings").EnumerateArray())
+    if (doc.RootElement.TryGetProperty("listings", out JsonElement listingsEl) &&
+        listingsEl.ValueKind == JsonValueKind.Array)
     {
-        string itemId = listing.GetProperty("itemId").GetString();
-        if (itemId.StartsWith("a"))
+        foreach (JsonElement listing in listingsEl.EnumerateArray())
         {
-            continue;
-        }
+            string itemId = listing.TryGetProperty("itemId", out JsonElement itemIdEl)
+                ? itemIdEl.GetString() ?? ""
+                : "";
+            if (itemId == "" || itemId.StartsWith("a"))
+            {
+                continue;
+            }
 
-        try
-        {
-            ads.Add(Listing.FromJson(listing));
-        }
-        catch
-        {
+            try
+            {
+                ads.Add(Listing.FromJson(listing));
+            }
+            catch
+            {
+            }
         }
     }
 
     return ads;
 }
 
-string FindInText(string text, string pattern)
+static string FindInText(string text, string pattern)
 {
     Match match = Regex.Match(text, pattern);
-    if (match.Success)
+    return match.Success ? match.Groups[1].Value : "";
+}
+
+static string ExtractJsonArray(string text, string sectionMarker, string arrayMarker)
+{
+    int sectionStart = text.IndexOf(sectionMarker, StringComparison.Ordinal);
+    if (sectionStart < 0)
     {
-        return match.Groups[1].Value;
+        return "";
+    }
+
+    int markerStart = text.IndexOf(arrayMarker, sectionStart, StringComparison.Ordinal);
+    if (markerStart < 0)
+    {
+        return "";
+    }
+
+    int openBracket = text.IndexOf('[', markerStart + arrayMarker.Length);
+    if (openBracket < 0)
+    {
+        return "";
+    }
+
+    int depth = 0;
+    bool inString = false;
+    bool escaped = false;
+
+    for (int i = openBracket; i < text.Length; i++)
+    {
+        char c = text[i];
+        if (inString)
+        {
+            if (escaped)
+            {
+                escaped = false;
+            }
+            else if (c == '\\')
+            {
+                escaped = true;
+            }
+            else if (c == '"')
+            {
+                inString = false;
+            }
+
+            continue;
+        }
+
+        if (c == '"')
+        {
+            inString = true;
+        }
+        else if (c == '[')
+        {
+            depth++;
+        }
+        else if (c == ']')
+        {
+            depth--;
+            if (depth == 0)
+            {
+                return text.Substring(openBracket + 1, i - openBracket - 1);
+            }
+        }
     }
 
     return "";
 }
 
-async Task AddPageDetails(Listing ad)
+static string ExtractDescriptionHtml(string html)
 {
-    if (DateTime.Now < skipDetailsUntil)
+    const string marker = "data-collapsable=\"description\"";
+    int markerIndex = html.IndexOf(marker, StringComparison.Ordinal);
+    if (markerIndex < 0)
     {
-        return;
+        return "";
     }
+
+    int contentStart = html.IndexOf('>', markerIndex + marker.Length);
+    if (contentStart < 0)
+    {
+        return "";
+    }
+
+    contentStart++;
+    int depth = 1;
+    int pos = contentStart;
+
+    while (pos < html.Length && depth > 0)
+    {
+        int nextOpen = html.IndexOf("<div", pos, StringComparison.OrdinalIgnoreCase);
+        int nextClose = html.IndexOf("</div>", pos, StringComparison.OrdinalIgnoreCase);
+
+        if (nextClose < 0)
+        {
+            return "";
+        }
+
+        if (nextOpen >= 0 && nextOpen < nextClose)
+        {
+            depth++;
+            pos = nextOpen + 4;
+        }
+        else
+        {
+            depth--;
+            if (depth == 0)
+            {
+                return html.Substring(contentStart, nextClose - contentStart);
+            }
+
+            pos = nextClose + 6;
+        }
+    }
+
+    return "";
+}
+
+async Task<(bool NotFound, bool Reserved)> AddPageDetails(Listing ad, bool alsoParseTitleAndPrice = false)
+{
+    if (DateTime.Now < skipDetailsUntil || ad.Link == "")
+    {
+        return (false, false);
+    }
+
+    TimeSpan sinceLast = DateTime.Now - lastDetailsFetch;
+    int minGapMs = Random.Shared.Next(700, 1300);
+    if (sinceLast < TimeSpan.FromMilliseconds(minGapMs))
+    {
+        await Task.Delay(TimeSpan.FromMilliseconds(minGapMs) - sinceLast);
+    }
+
+    lastDetailsFetch = DateTime.Now;
 
     try
     {
-        string html = await client.GetStringAsync("https://www.marktplaats.nl" + ad.Link);
+        string pageUrl = ad.Link.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+            ? ad.Link
+            : "https://www.marktplaats.nl" + ad.Link;
+
+        using HttpRequestMessage pageReq = new HttpRequestMessage(HttpMethod.Get, pageUrl);
+        pageReq.Headers.TryAddWithoutValidation("Accept",
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8");
+        pageReq.Headers.TryAddWithoutValidation("Sec-Fetch-Dest", "document");
+        pageReq.Headers.TryAddWithoutValidation("Sec-Fetch-Mode", "navigate");
+        pageReq.Headers.TryAddWithoutValidation("Sec-Fetch-Site", "same-origin");
+        pageReq.Headers.TryAddWithoutValidation("Upgrade-Insecure-Requests", "1");
+
+        using HttpResponseMessage response = await marktplaatsClient.SendAsync(pageReq);
+        if (response.StatusCode == HttpStatusCode.NotFound || response.StatusCode == HttpStatusCode.Gone)
+        {
+            return (true, false);
+        }
+
+        if (response.StatusCode == HttpStatusCode.TooManyRequests || response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            skipDetailsUntil = DateTime.Now.AddMinutes(30);
+            limiter.Blocked();
+            BotLog.Write($"Listing pages returned {(int)response.StatusCode}: skipping extra info for 30 minutes.");
+            return (false, false);
+        }
+
+        response.EnsureSuccessStatusCode();
+        string html = await response.Content.ReadAsStringAsync();
+
+        if (alsoParseTitleAndPrice)
+        {
+            if (response.RequestMessage?.RequestUri != null)
+            {
+                ad.Link = response.RequestMessage.RequestUri.ToString();
+            }
+
+            string pageTitle = FindInText(html, """<title>([^<]+)</title>""");
+            if (pageTitle != "")
+            {
+                pageTitle = WebUtility.HtmlDecode(pageTitle)
+                    .Replace("≥ ", "")
+                    .Split(" - ")[0]
+                    .Trim();
+                if (pageTitle != "")
+                {
+                    ad.Title = pageTitle;
+                }
+            }
+
+            string centsStr = FindInText(html, """priceCents":(\d+)""");
+            if (long.TryParse(centsStr, out long cents))
+            {
+                ad.Price = cents / 100.0;
+            }
+        }
 
         string stats = FindInText(html, """stats":\{([^}]*)\}""");
         string views = FindInText(stats, """viewCount":(\d+)""");
         string saves = FindInText(stats, """favoritedCount":(\d+)""");
         string since = FindInText(stats, """since":"([^"]+)""");
         string years = FindInText(html, """activeYears":(\d+)""");
-        string bids = FindInText(html, """bidsInfo":\{.*?"bids":\[(.*?)\]""");
+        string ratingStr = FindInText(html, """averageScore":(\d+(?:\.\d+)?)""");
+        string reviewsStr = FindInText(html, """numberOfReviews":(\d+)""");
         ad.SellerType = FindInText(html, """sellerType":"([A-Z_]+)""");
 
-        if (views != "")
+        if (int.TryParse(views, out int parsedViews))
         {
-            ad.Views = int.Parse(views);
+            ad.Views = parsedViews;
         }
 
-        if (saves != "")
+        if (int.TryParse(saves, out int parsedSaves))
         {
-            ad.Saves = int.Parse(saves);
+            ad.Saves = parsedSaves;
         }
 
-        if (since != "")
+        if (since != "" && DateTimeOffset.TryParse(since, CultureInfo.InvariantCulture, DateTimeStyles.None,
+                out DateTimeOffset postedAt))
         {
-            ad.PostedAt = DateTime.Parse(since);
+            ad.PostedAt = postedAt.LocalDateTime;
         }
 
-        if (years != "")
+        if (int.TryParse(years, out int parsedYears))
         {
-            ad.SellerYears = int.Parse(years);
+            ad.SellerYears = parsedYears;
         }
 
-        Match description =
-            Regex.Match(html, """data-collapsable="description">(.*?)</div>""", RegexOptions.Singleline);
-        if (description.Success)
+        if (double.TryParse(ratingStr, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsedRating) &&
+            parsedRating >= 0 && parsedRating <= 5)
         {
-            string text = Regex.Replace(description.Groups[1].Value, "<[^>]+>", "\n");
-            ad.Description = System.Net.WebUtility.HtmlDecode(text).Trim();
+            ad.SellerRating = parsedRating;
         }
 
+        if (int.TryParse(reviewsStr, out int parsedReviews))
+        {
+            ad.SellerReviewCount = parsedReviews;
+        }
+
+        string descriptionHtml = ExtractDescriptionHtml(html);
+        if (descriptionHtml != "")
+        {
+            string text = Regex.Replace(descriptionHtml, "<[^>]+>", "\n");
+            ad.Description = WebUtility.HtmlDecode(text).Trim();
+        }
+
+        string bids = ExtractJsonArray(html, "\"bidsInfo\"", "\"bids\"");
         foreach (Match bid in Regex.Matches(bids, """value":(\d+)"""))
         {
-            ad.BidCount++;
-            double amount = int.Parse(bid.Groups[1].Value) / 100.0;
-            if (amount > ad.HighestBid)
+            if (long.TryParse(bid.Groups[1].Value, out long bidCents))
             {
-                ad.HighestBid = amount;
+                ad.BidCount++;
+                double amount = bidCents / 100.0;
+                if (amount > ad.HighestBid)
+                {
+                    ad.HighestBid = amount;
+                }
             }
         }
+
+        bool isReserved = html.Contains("\"reserved\":true", StringComparison.OrdinalIgnoreCase) ||
+                          html.Contains("Gereserveerd</span>", StringComparison.OrdinalIgnoreCase);
+        return (false, isReserved);
     }
     catch (Exception ex)
     {
-        Console.WriteLine($"Couldn't get extra info for '{ad.Title}': {ex.Message}");
-        if (ex is HttpRequestException httpError &&
-            (httpError.StatusCode == System.Net.HttpStatusCode.TooManyRequests ||
-             httpError.StatusCode == System.Net.HttpStatusCode.Forbidden))
-        {
-            skipDetailsUntil = DateTime.Now.AddMinutes(30);
-            Console.WriteLine("Listing pages are blocked: skipping extra info for 30 minutes.");
-        }
+        BotLog.Write($"Couldn't get extra info for '{ad.Title}': {ex.Message}");
+        return (false, false);
     }
 }
 
-async Task<bool> TrySend(Listing ad, string search, string forcedAlert = "")
+async Task CheckNextWatchedListing()
 {
-    if (!searchList.Prices.ContainsKey(search))
+    if (DateTime.Now < skipDetailsUntil || DateTime.Now - lastWatchFetch < TimeSpan.FromSeconds(15))
     {
-        return false;
+        return;
     }
-   
-    int wantedCategory = searchList.SubCategories[search];
-    if (wantedCategory != 0 && ad.CategoryId != wantedCategory)
+
+    foreach (UserSession user in userManager.AllUsers)
+    {
+        WatchItem? item = user.Watchlist.NextDue(TimeSpan.FromMinutes(5));
+        if (item == null)
+        {
+            continue;
+        }
+
+        lastWatchFetch = DateTime.Now;
+
+        item.LastCheckedAt = DateTime.Now;
+        Listing probe = new Listing { Id = item.Id, Title = item.Title, Link = item.Link };
+        var (notFound, reserved) = await AddPageDetails(probe, alsoParseTitleAndPrice: true);
+
+        if (notFound)
+        {
+            user.Watchlist.Remove(item.Id);
+            await user.Telegram.SendText(
+                $"❌ <b>Watched listing removed or sold:</b>\n{WebUtility.HtmlEncode(item.Title)}",
+                parseMode: "HTML");
+            return;
+        }
+
+        if (probe.Title != "" && item.Title.StartsWith("Listing m"))
+        {
+            item.Title = probe.Title;
+        }
+        if (probe.Link != "")
+        {
+            item.Link = probe.Link;
+        }
+
+        string fullUrl = item.Link.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+            ? item.Link
+            : "https://www.marktplaats.nl" + item.Link;
+        string buttons = Telegram.ListingButtons(fullUrl, item.Id, watching: true, user.Settings.IsDutch);
+
+        if (reserved && item.Status != "RESERVED")
+        {
+            item.Status = "RESERVED";
+            await user.Telegram.SendText(
+                $"🔒 <b>Watched listing marked Gereserveerd:</b>\n{WebUtility.HtmlEncode(item.Title)}",
+                buttons,
+                parseMode: "HTML");
+        }
+        else if (!reserved && item.Status == "RESERVED")
+        {
+            item.Status = "ACTIVE";
+            await user.Telegram.SendText(
+                $"🔓 <b>Watched listing available again:</b>\n{WebUtility.HtmlEncode(item.Title)}",
+                buttons,
+                parseMode: "HTML");
+        }
+
+        if (probe.Price > 0 && item.LastPrice > 0 && probe.Price < item.LastPrice)
+        {
+            double oldPrice = item.LastPrice;
+            item.LastPrice = probe.Price;
+            bool hitTarget = item.TargetPrice > 0 && probe.Price <= item.TargetPrice;
+            string header = hitTarget ? "🎯 <b>WATCH TARGET HIT!</b>" : "📉 <b>Watched listing price drop!</b>";
+            await user.Telegram.SendText(
+                $"{header}\n{WebUtility.HtmlEncode(item.Title)}\n💶 {Listing.FormatEuro(oldPrice)} → <b>{Listing.FormatEuro(probe.Price)}</b>",
+                buttons,
+                parseMode: "HTML");
+        }
+        else if (probe.Price > 0 && item.LastPrice == 0)
+        {
+            item.LastPrice = probe.Price;
+        }
+
+        if (probe.HighestBid > item.HighestBid && probe.HighestBid > 0)
+        {
+            double oldBid = item.HighestBid;
+            item.HighestBid = probe.HighestBid;
+            item.BidCount = probe.BidCount;
+            string bidLine = oldBid > 0
+                ? $"{Listing.FormatEuro(oldBid)} → <b>{Listing.FormatEuro(probe.HighestBid)}</b>"
+                : $"<b>{Listing.FormatEuro(probe.HighestBid)}</b>";
+            await user.Telegram.SendText(
+                $"💰 <b>New highest bid on watched listing:</b>\n{WebUtility.HtmlEncode(item.Title)}\n{bidLine} ({probe.BidCount} bids)",
+                buttons,
+                parseMode: "HTML");
+        }
+
+        user.Watchlist.Save();
+        return;
+    }
+}
+
+async Task<bool> TrySend(UserSession user, Listing ad, string search, string forcedAlert = "")
+{
+    if (!user.SearchList.Rules.TryGetValue(search, out SearchRule? rule))
     {
         return false;
     }
 
+    bool isMarktplaats = ad.Source.Equals("Marktplaats", StringComparison.OrdinalIgnoreCase);
 
-    if (forcedAlert == "" && seenIds.Contains(ad.Id))
+    if (isMarktplaats && rule.SubCategory != 0 && ad.CategoryId != rule.SubCategory)
+    {
+        user.Digest.RecordFilteredOut();
+        user.Stats.RecordFiltered(rule.Query);
+        user.Feed.RecordSkipped(ad, rule.Query, $"Wrong subcategory ({ad.CategoryId})", "other");
+        return false;
+    }
+
+    if (forcedAlert == "" && user.SeenIds.Contains(ad.Id))
     {
         return false;
     }
 
-    int maxPrice = searchList.Prices[search];
+    if (user.Blocklist.IsSellerBlocked(ad.SellerName))
+    {
+        BotLog.Write($"Skipped (blocked seller '{ad.SellerName}'): {ad.Title}");
+        user.Digest.RecordFilteredOut();
+        user.Stats.RecordFiltered(rule.Query);
+        user.Feed.RecordSkipped(ad, rule.Query, $"Blocked seller: {ad.SellerName}", "business");
+        return false;
+    }
 
     if (Filters.IsNotForSale(ad.Title))
     {
+        user.Digest.RecordFilteredOut();
+        user.Stats.RecordFiltered(rule.Query);
+        user.Feed.RecordSkipped(ad, rule.Query, "Not for sale (gezocht/reparatie/inkoop)", "other");
         return false;
     }
 
-    string badWord = Filters.FindBadFault(ad.Title + ". " + ad.Description, searchList.SkipWords[search]);
+    string[] globalSkip = user.Blocklist.GetGlobalSkipWordsArray();
+    string initialText = ad.Title + ". " + ad.Description;
+    string badWord = Filters.FindBadFault(initialText, rule.SkipWords);
+    if (badWord == "")
+    {
+        badWord = Filters.FindBadFault(initialText, globalSkip);
+    }
     if (badWord != "")
     {
-        Console.WriteLine($"Skipped ({badWord}): {ad.Title}");
+        BotLog.Write($"Skipped ({badWord}): {ad.Title}");
+        user.Digest.RecordFilteredOut();
+        user.Stats.RecordFiltered(rule.Query);
+        user.Feed.RecordSkipped(ad, rule.Query, $"Skip word: {badWord}", "skipWord");
         return false;
     }
 
-    if (ad.Price > maxPrice)
+    if (ad.Price > rule.MaxPrice)
     {
+        user.Digest.RecordFilteredOut();
+        user.Stats.RecordFiltered(rule.Query);
+        user.Feed.RecordSkipped(ad, rule.Query, $"Over max price ({Listing.FormatEuro(ad.Price)} > €{rule.MaxPrice})", "price");
         return false;
     }
 
-    bool isNearby = ad.DistanceKm >= 0 && ad.DistanceKm <= pickupKm;
+    bool isNearby = ad.DistanceKm >= 0 && ad.DistanceKm <= user.PickupKm;
     if (!ad.CanShip && !isNearby)
     {
+        user.Digest.RecordFilteredOut();
+        user.Stats.RecordFiltered(rule.Query);
+        user.Feed.RecordSkipped(ad, rule.Query, $"Pickup only ({ad.DistanceKm} km > {user.PickupKm} km)", "other");
         return false;
     }
 
@@ -605,33 +1204,80 @@ async Task<bool> TrySend(Listing ad, string search, string forcedAlert = "")
     {
         alert = forcedAlert;
     }
-    else if (Filters.IsSuperDeal(ad, maxPrice))
+    else if (Filters.IsSuperDeal(ad, rule.MaxPrice))
     {
         alert = "SUPER DEAL";
     }
-    else if (searchList.UrgentSearches.Contains(search))
+    else if (rule.Urgent)
     {
         alert = "URGENT";
     }
 
-    ad.MatchedSearch = search;
+    ad.MatchedSearch = rule.Query;
     ad.CategoryName = categoryNames.GetValueOrDefault(ad.CategoryId, "");
-    await AddPageDetails(ad);
+    if (isMarktplaats)
+    {
+        await AddPageDetails(ad);
+    }
 
-    string lateBadWord = Filters.FindBadFault(ad.Description, searchList.SkipWords[search]);
+    if (ad.HighestBid > rule.MaxPrice && rule.MaxPrice > 0)
+    {
+        BotLog.Write($"Skipped (highest bid {Listing.FormatEuro(ad.HighestBid)} > max €{rule.MaxPrice}): {ad.Title}");
+        user.Digest.RecordFilteredOut();
+        user.Stats.RecordFiltered(rule.Query);
+        user.Feed.RecordSkipped(ad, rule.Query, $"Highest bid {Listing.FormatEuro(ad.HighestBid)} > max €{rule.MaxPrice}", "other");
+        return false;
+    }
+
+    if (ad.Price == 0)
+    {
+        ad.MentionedPrice = Filters.ExtractMentionedPrice(ad.Description);
+        if (ad.MentionedPrice > 0 && rule.MaxPrice > 0 &&
+            user.Settings.SkipHighDescriptionPrice &&
+            ad.MentionedPrice > rule.MaxPrice * 1.35)
+        {
+            BotLog.Write($"Skipped (description mentions {Listing.FormatEuro(ad.MentionedPrice)} > max €{rule.MaxPrice}): {ad.Title}");
+            user.Digest.RecordFilteredOut();
+            user.Stats.RecordFiltered(rule.Query);
+            user.Feed.RecordSkipped(ad, rule.Query, $"Description mentions {Listing.FormatEuro(ad.MentionedPrice)}", "price");
+            return false;
+        }
+    }
+
+    string lateBadWord = Filters.FindBadFault(ad.Description, rule.SkipWords);
+    if (lateBadWord == "")
+    {
+        lateBadWord = Filters.FindBadFault(ad.Description, globalSkip);
+    }
     if (lateBadWord != "")
     {
-        Console.WriteLine($"Skipped ({lateBadWord}, in full description): {ad.Title}");
+        BotLog.Write($"Skipped ({lateBadWord}, in full description): {ad.Title}");
+        user.Digest.RecordFilteredOut();
+        user.Stats.RecordFiltered(rule.Query);
+        user.Feed.RecordSkipped(ad, rule.Query, $"Skip word (description): {lateBadWord}", "skipWord");
         return false;
     }
 
     if (ad.SellerType == "TRADER")
     {
-        Console.WriteLine($"Skipped (business): {ad.Title}");
+        BotLog.Write($"Skipped (business): {ad.Title}");
+        user.Digest.RecordFilteredOut();
+        user.Stats.RecordFiltered(rule.Query);
+        user.Feed.RecordSkipped(ad, rule.Query, "Business account (TRADER)", "business");
         return false;
     }
 
-    ad.LikelyBusiness = BusinessFilter.Score(ad) >= 2;
+    bool isRetailOutlet = ad.Source.Equals("Coolblue Tweedekans", StringComparison.OrdinalIgnoreCase);
+    ad.LikelyBusiness = !isRetailOutlet && BusinessFilter.Score(ad) >= 2;
+    if (ad.LikelyBusiness && user.Settings.SkipLikelyBusinesses)
+    {
+        BotLog.Write($"Skipped (likely business): {ad.Title}");
+        user.Digest.RecordFilteredOut();
+        user.Stats.RecordFiltered(rule.Query);
+        user.Feed.RecordSkipped(ad, rule.Query, "Likely business (BusinessFilter)", "business");
+        return false;
+    }
+
     RepairHint? hint = hints.Find(ad.Title + ". " + ad.Description);
     if (hint != null)
     {
@@ -641,132 +1287,463 @@ async Task<bool> TrySend(Listing ad, string search, string forcedAlert = "")
 
     if (ad.Price > 0)
     {
-        ad.TypicalPrice = history.TypicalPrice(search, ad.CategoryId, out int count);
+        ad.TypicalPrice = user.History.TypicalPrice(rule.Query, ad.CategoryId, out int count);
         ad.TypicalCount = count;
     }
 
-
-    HistoryEntry? earlier = history.FindRepost(ad);
-    if (earlier != null)
+    // Compute perceptual thumbnail hash to catch reposts even when the seller changes the title
+    if (ad.Photo != "" && ad.PhotoHash == "")
     {
-        ad.RepostInfo =
-            $"Posted before on {earlier.FirstSeen.ToString("d MMM", System.Globalization.CultureInfo.InvariantCulture)}";
-        if (earlier.Price > 0)
+        try
         {
-            ad.RepostInfo += $" for €{earlier.Price}";
+            using HttpResponseMessage imgResp = await marktplaatsClient.GetAsync(ad.Photo);
+            if (imgResp.IsSuccessStatusCode)
+            {
+                byte[] imgBytes = await imgResp.Content.ReadAsByteArrayAsync();
+                if (imgBytes.Length > 0 && imgBytes.Length <= 1024 * 1024)
+                {
+                    ad.PhotoHash = ImageHasher.ComputeHash(imgBytes);
+                    user.History.SetPhotoHash(ad.Id, ad.PhotoHash);
+                }
+            }
+        }
+        catch
+        {
         }
     }
 
-    IsNew(ad.Id);
-    await telegram.SendListing(ad, Filters.IsNight(), alert);
+    HistoryEntry? earlier = user.History.FindRepost(ad, out bool matchedByPhoto);
+    if (earlier != null)
+    {
+        ad.RepostInfo = matchedByPhoto
+            ? $"Same photo posted on {earlier.FirstSeen.ToString("d MMM", CultureInfo.InvariantCulture)} (\"{earlier.Title}\")"
+            : $"Posted before on {earlier.FirstSeen.ToString("d MMM", CultureInfo.InvariantCulture)}";
+        if (earlier.Price > 0)
+        {
+            ad.RepostInfo += $" for {Listing.FormatEuro(earlier.Price)}";
+        }
+    }
+
+    AiGradeResult? aiGrade = await user.AiGrader.GradeAsync(ad, rule, user.Settings);
+    if (aiGrade != null)
+    {
+        ad.AiVerdict = aiGrade.Verdict;
+        ad.AiReason = aiGrade.Reason;
+        ad.AiResale = aiGrade.Resale;
+        ad.AiMaxBid = aiGrade.MaxBid;
+
+        if (user.Settings.AiAutoSkip && aiGrade.Verdict == "SKIP")
+        {
+            BotLog.Write($"Skipped (AI: {aiGrade.Reason}): {ad.Title}");
+            user.Digest.RecordFilteredOut();
+            user.Stats.RecordFiltered(rule.Query);
+            user.Feed.RecordSkipped(ad, rule.Query, $"AI SKIP: {aiGrade.Reason}", "other");
+            return false;
+        }
+    }
+
+    bool night = Filters.IsNight(user.Settings);
+    bool isWatched = user.Watchlist.Contains(ad.Id);
+    long sentMessageId = await user.Telegram.SendListing(ad, night, alert, isWatched, user.Settings.IsDutch);
+    user.MarkSeen(ad.Id);
+    user.RememberSentMessage(ad, sentMessageId);
+    user.History.MarkPriceAlerted(ad.Id);
+    user.Digest.RecordSent(ad, alert, wasSilent: night && alert == "");
+    user.Feed.RecordSent(ad, alert);
+    webDashboard.BroadcastUpdate();
+    user.Stats.RecordSent(rule.Query, ad.Price);
     await Task.Delay(1000);
-    listingsSent++;
-    Console.WriteLine($"Sent ({search}): {ad.Title}");
-    Console.WriteLine();
+    user.ListingsSent++;
+    BotLog.Write($"Sent ({user.Name} / {rule.Query}): {ad.Title}");
     return true;
 }
 
 async Task HandleError(string what, Exception ex)
 {
+    BotLog.Write($"Error with '{what}': {ex.Message}");
+    errorsInARow++;
+    if (errorsInARow == 5)
     {
-        Console.WriteLine($"Error with '{what}': {ex.Message}");
-        errorsInARow++;
-        if (errorsInARow == 5)
+        try
         {
-            try
-            {
-                await telegram.SendText(
-                    $"⚠️ 5 errors in a row. Marktplaats might be blocking me, or the internet is down.\nLast error: {ex.Message}");
-            }
-            catch
-            {
-            }
+            await owner.Telegram.SendText(
+                $"⚠️ 5 errors in a row. Marktplaats might be blocking me, or the internet is down.\nLast error: {ex.Message}");
+        }
+        catch
+        {
+        }
+    }
+
+    if (ex is HttpRequestException httpError &&
+        (httpError.StatusCode == HttpStatusCode.TooManyRequests ||
+         httpError.StatusCode == HttpStatusCode.Forbidden))
+    {
+        limiter.Blocked();
+    }
+}
+
+int userTurnOffset = 0;
+
+(UserSession? User, string Search) PickNextDueSearch()
+{
+    List<UserSession> users = userManager.AllUsers.ToList();
+    if (users.Count == 0)
+    {
+        return (null, "");
+    }
+
+    for (int i = 0; i < users.Count; i++)
+    {
+        UserSession candidate = users[(userTurnOffset + i) % users.Count];
+        if (candidate.Paused || !candidate.OnboardingComplete)
+        {
+            continue;
         }
 
-        if (ex is HttpRequestException httpError &&
-            (httpError.StatusCode == System.Net.HttpStatusCode.TooManyRequests ||
-             httpError.StatusCode == System.Net.HttpStatusCode.Forbidden))
+        string due = candidate.Scheduler.NextDue(candidate.SearchList.GetKeysSnapshot());
+        if (due != "")
         {
-            limiter.Blocked();
+            userTurnOffset = (userTurnOffset + i + 1) % users.Count;
+            return (candidate, due);
+        }
+    }
+
+    return (null, "");
+}
+
+// 30-40s Category Firehose: polls the newest 100 listings in each active L1 category
+// and matches all user searches locally in memory for fast detection with fewer requests.
+async Task CheckCategoryFirehose()
+{
+    HashSet<string> activeCategories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    foreach (UserSession u in userManager.AllUsers)
+    {
+        if (u.Paused || !u.OnboardingComplete || !u.Settings.FastCategoryMode)
+        {
+            continue;
+        }
+        foreach (SearchRule r in u.SearchList.GetRulesSnapshot())
+        {
+            if (r.Category != "")
+            {
+                activeCategories.Add(r.Category);
+            }
+        }
+    }
+
+    foreach (string cat in activeCategories)
+    {
+        DateTime lastCheck = lastCategoryCheck.GetValueOrDefault(cat, DateTime.MinValue);
+        if (DateTime.Now - lastCheck < TimeSpan.FromSeconds(38))
+        {
+            continue;
+        }
+
+        lastCategoryCheck[cat] = DateTime.Now;
+        bool quiet = !newestIdPerCategory.ContainsKey(cat);
+        long newest = newestIdPerCategory.GetValueOrDefault(cat, 0);
+        long highest = newest;
+
+        try
+        {
+            string url =
+                $"https://www.marktplaats.nl/lrp/api/search?l1CategoryId={cat}&limit=100&sortBy=SORT_INDEX&sortOrder=DECREASING&postcode={Uri.EscapeDataString(owner.Postcode)}";
+            List<Listing> ads = await FetchListings(url, $"cat|{cat}|{owner.Postcode}", bypassCache: true);
+
+            foreach (Listing ad in ads)
+            {
+                long idNumber = 0;
+                bool hasNum = ad.Id.Length > 1 && long.TryParse(ad.Id.AsSpan(1), out idNumber);
+                if (hasNum && idNumber > highest)
+                {
+                    highest = idNumber;
+                }
+
+                if (quiet || (hasNum && idNumber <= newest))
+                {
+                    continue;
+                }
+
+                foreach (UserSession u in userManager.AllUsers)
+                {
+                    if (u.Paused || !u.OnboardingComplete || !u.Settings.FastCategoryMode || u.SeenIds.Contains(ad.Id))
+                    {
+                        continue;
+                    }
+
+                    foreach (SearchRule rule in u.SearchList.GetRulesSnapshot())
+                    {
+                        if (!string.Equals(rule.Category, cat, StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+
+                        if (!Filters.MatchesSearch(rule.Query, ad))
+                        {
+                            continue;
+                        }
+
+                        u.History.Remember(ad, rule.Query);
+                        u.Stats.RecordNew(rule.Query);
+                        if (await TrySend(u, ad, rule.Query))
+                        {
+                            break; // Already sent to this user
+                        }
+                    }
+                }
+            }
+
+            newestIdPerCategory[cat] = highest;
+        }
+        catch (Exception ex)
+        {
+            await HandleError($"category {cat}", ex);
+        }
+
+        // At most one category firehose fetch per loop cycle so we never burst Marktplaats
+        return;
+    }
+}
+
+async Task CheckTweakersFeed()
+{
+    bool anyEnabled = userManager.AllUsers.Any(u => !u.Paused && u.OnboardingComplete && u.Settings.EnableTweakers);
+    if (!anyEnabled)
+    {
+        return;
+    }
+
+    List<Listing> newAds = await tweakersSource.FetchNewIfDueAsync(marktplaatsClient, TimeSpan.FromSeconds(60));
+    foreach (Listing ad in newAds)
+    {
+        foreach (UserSession u in userManager.AllUsers)
+        {
+            if (u.Paused || !u.OnboardingComplete || !u.Settings.EnableTweakers || u.SeenIds.Contains(ad.Id))
+            {
+                continue;
+            }
+
+            foreach (SearchRule rule in u.SearchList.GetRulesSnapshot())
+            {
+                if (!Filters.MatchesSearch(rule.Query, ad))
+                {
+                    continue;
+                }
+
+                u.History.Remember(ad, rule.Query);
+                u.Stats.RecordNew(rule.Query);
+                if (await TrySend(u, ad, rule.Query))
+                {
+                    break;
+                }
+            }
         }
     }
 }
 
-Dictionary<string, long> newestIdPerSearch = new Dictionary<string, long>();
+async Task CheckExtraSources()
+{
+    // 1. Coolblue Tweedekans (slow category rotation, matched against all user searches)
+    if (userManager.AllUsers.Any(u => !u.Paused && u.OnboardingComplete && u.Settings.EnableCoolblue))
+    {
+        List<Listing> cbAds = await coolblueSource.FetchNextCategoryIfDueAsync(marktplaatsClient, TimeSpan.FromSeconds(75));
+        foreach (Listing ad in cbAds)
+        {
+            foreach (UserSession u in userManager.AllUsers)
+            {
+                if (u.Paused || !u.OnboardingComplete || !u.Settings.EnableCoolblue || u.SeenIds.Contains(ad.Id))
+                {
+                    continue;
+                }
+
+                foreach (SearchRule rule in u.SearchList.GetRulesSnapshot())
+                {
+                    if (!Filters.MatchesSearch(rule.Query, ad))
+                    {
+                        continue;
+                    }
+
+                    u.History.Remember(ad, rule.Query);
+                    u.Stats.RecordNew(rule.Query);
+                    if (await TrySend(u, ad, rule.Query))
+                    {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // Helper for per-query round-robin sources (2dehands.be, Kleinanzeigen.de, Vinted.nl)
+    List<SearchRule> CollectActiveRules(Func<BotSettings, bool> isEnabled)
+    {
+        Dictionary<string, SearchRule> merged = new Dictionary<string, SearchRule>(StringComparer.OrdinalIgnoreCase);
+        foreach (UserSession u in userManager.AllUsers)
+        {
+            if (u.Paused || !u.OnboardingComplete || !isEnabled(u.Settings))
+            {
+                continue;
+            }
+
+            foreach (SearchRule r in u.SearchList.GetRulesSnapshot())
+            {
+                if (!merged.TryGetValue(r.Query, out SearchRule? existing) || r.MaxPrice > existing.MaxPrice || (r.Urgent && !existing.Urgent))
+                {
+                    merged[r.Query] = r;
+                }
+            }
+        }
+        return merged.Values.ToList();
+    }
+
+    async Task DispatchQueryResults(string query, List<Listing> ads, Func<BotSettings, bool> isEnabled)
+    {
+        if (query == "" || ads.Count == 0)
+        {
+            return;
+        }
+
+        foreach (Listing ad in ads)
+        {
+            foreach (UserSession u in userManager.AllUsers)
+            {
+                if (u.Paused || !u.OnboardingComplete || !isEnabled(u.Settings) || u.SeenIds.Contains(ad.Id))
+                {
+                    continue;
+                }
+
+                if (!u.SearchList.Rules.TryGetValue(query, out SearchRule? userRule))
+                {
+                    continue;
+                }
+
+                u.History.Remember(ad, userRule.Query);
+                u.Stats.RecordNew(userRule.Query);
+                await TrySend(u, ad, userRule.Query);
+            }
+        }
+    }
+
+    // 2. 2dehands.be (at most 1 request every 25s, each query every ~4 min)
+    List<SearchRule> beRules = CollectActiveRules(s => s.EnableTweedehands);
+    if (beRules.Count > 0)
+    {
+        var (beQuery, beAds) = await tweedehandsSource.FetchNextDueAsync(
+            marktplaatsClient, beRules, TimeSpan.FromSeconds(25), TimeSpan.FromMinutes(4));
+        await DispatchQueryResults(beQuery, beAds, s => s.EnableTweedehands);
+    }
+
+    // 3. Kleinanzeigen.de (at most 1 request every 30s, each query every ~5 min)
+    List<SearchRule> deRules = CollectActiveRules(s => s.EnableKleinanzeigen);
+    if (deRules.Count > 0)
+    {
+        var (deQuery, deAds) = await kleinanzeigenSource.FetchNextDueAsync(
+            marktplaatsClient, deRules, TimeSpan.FromSeconds(30), TimeSpan.FromMinutes(5));
+        await DispatchQueryResults(deQuery, deAds, s => s.EnableKleinanzeigen);
+    }
+
+    // 4. Vinted.nl (at most 1 request every 30s, each query every ~5 min)
+    List<SearchRule> vintedRules = CollectActiveRules(s => s.EnableVinted);
+    if (vintedRules.Count > 0)
+    {
+        var (vQuery, vAds) = await vintedSource.FetchNextDueAsync(
+            marktplaatsClient, vintedRules, TimeSpan.FromSeconds(30), TimeSpan.FromMinutes(5));
+        await DispatchQueryResults(vQuery, vAds, s => s.EnableVinted);
+    }
+}
 
 while (true)
 {
-    if (paused)
-    {
-        await CheckCommands();
-        await Task.Delay(2000);
-        continue;
-    }
+    await CheckAutoReload();
+    await CheckPeriodicTasks();
+    await CheckCategoryFirehose();
+    await CheckTweakersFeed();
+    await CheckExtraSources();
+    await CheckNextWatchedListing();
 
-
-    string search = scheduler.NextDue(searchList.Prices.Keys);
-    if (search == "")
+    var (activeUser, search) = PickNextDueSearch();
+    if (activeUser == null || search == "")
     {
-        await CheckCommands();
+        await PollTelegramUpdates();
         await Task.Delay(1000);
         continue;
     }
 
+    if (!activeUser.SearchList.Rules.TryGetValue(search, out SearchRule? rule))
+    {
+        continue;
+    }
 
-    bool quiet = !newestIdPerSearch.ContainsKey(search);
+    bool quiet = !activeUser.NewestIdPerSearch.ContainsKey(search);
     bool foundNew = false;
 
     try
     {
         string url =
-            $"https://www.marktplaats.nl/lrp/api/search?query={Uri.EscapeDataString(search)}&limit=30&sortBy=SORT_INDEX&sortOrder=DECREASING&postcode={postcode}";
-        if (searchList.Categories[search] != "")
+            $"https://www.marktplaats.nl/lrp/api/search?query={Uri.EscapeDataString(rule.Query)}&limit=30&sortBy=SORT_INDEX&sortOrder=DECREASING&postcode={Uri.EscapeDataString(activeUser.Postcode)}";
+        if (rule.Category != "")
         {
-            url += $"&l1CategoryId={searchList.Categories[search]}";
+            url += $"&l1CategoryId={rule.Category}";
         }
 
-        List<Listing> ads = await FetchListings(url);
-        checksDone++;
+        string cacheKey = $"{rule.Query.ToLowerInvariant()}|{rule.Category}|{activeUser.Postcode}";
+        List<Listing> ads = await FetchListings(url, cacheKey);
+        activeUser.ChecksDone++;
+        activeUser.Digest.RecordCheck();
+        activeUser.Stats.RecordCheck(rule.Query);
 
-        long newest = newestIdPerSearch.GetValueOrDefault(search, 0);
+        long newest = activeUser.NewestIdPerSearch.GetValueOrDefault(search, 0);
         long highestThisCheck = newest;
 
         foreach (Listing ad in ads)
         {
-            long.TryParse(ad.Id.Substring(1), out long idNumber);
-            if (idNumber > highestThisCheck)
+            long idNumber = 0;
+            bool hasNumericId = ad.Id.Length > 1 && long.TryParse(ad.Id.AsSpan(1), out idNumber);
+            if (hasNumericId && idNumber > highestThisCheck)
             {
                 highestThisCheck = idNumber;
             }
 
-            double oldPrice = history.Remember(ad, search);
+            double oldPrice = activeUser.History.Remember(ad, rule.Query);
             if (oldPrice > 0 && ad.Price > 0 && ad.Price < oldPrice)
             {
                 ad.OldPrice = oldPrice;
-                await TrySend(ad, search, "PRICE DROP");
+                bool sentDrop = await TrySend(activeUser, ad, rule.Query, "PRICE DROP");
+                if (!sentDrop)
+                {
+                    activeUser.History.MarkPriceDropChecked(ad.Id, rule.Query);
+                }
+
                 continue;
             }
 
-            if (quiet || idNumber <= newest)
+            if (quiet)
+            {
+                continue;
+            }
+
+            if (hasNumericId ? idNumber <= newest : activeUser.SeenIds.Contains(ad.Id))
             {
                 continue;
             }
 
             foundNew = true;
+            activeUser.Stats.RecordNew(rule.Query);
 
-            await TrySend(ad, search);
+            await TrySend(activeUser, ad, rule.Query);
         }
 
-        newestIdPerSearch[search] = highestThisCheck;
+        activeUser.NewestIdPerSearch[search] = highestThisCheck;
 
-        history.SaveIfNeeded();
+        activeUser.History.SaveIfNeeded();
+        activeUser.Stats.SaveIfNeeded();
     }
     catch (Exception ex)
     {
-        await HandleError(search, ex);
+        await HandleError(rule.Query, ex);
     }
 
-    scheduler.Done(search, foundNew, searchList.UrgentSearches.Contains(search), Filters.IsNight());
-    await CheckCommands();
-    await Task.Delay(limiter.DelayMs);
+    activeUser.Scheduler.Done(search, foundNew, rule.Urgent, Filters.IsNight(activeUser.Settings), quiet);
+    await PollTelegramUpdates();
+    await DelayWithCommands(limiter.NextDelayWithJitterMs());
 }

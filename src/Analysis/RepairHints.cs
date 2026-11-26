@@ -1,20 +1,33 @@
+using System.Text.RegularExpressions;
+
 namespace MarktplaatsNotifier;
 
 // Reads hints.txt and finds a repair tip for a listing.
 // A line in hints.txt looks like: words;hint;question to ask the seller
 public class RepairHint
 {
-    public string[] Words { get; set; } = new string[0];
+    public string[] Words { get; set; } = Array.Empty<string>();
     public string Text { get; set; } = "";
     public string Question { get; set; } = "";
 }
 
 public class RepairHints
 {
-    private List<RepairHint> rules = new List<RepairHint>();
+    private static readonly Regex NegationBeforeWord = new Regex(
+        @"\b(?:geen|zonder)\s+(?:(?:enkele|enige|zichtbare)\s+)?$",
+        RegexOptions.Compiled);
+
+    private readonly List<RepairHint> rules = new List<RepairHint>();
+    private readonly object syncLock = new object();
+    private DateTime lastFileWriteUtc = DateTime.MinValue;
+
+    public int Count
+    {
+        get { lock (syncLock) { return rules.Count; } }
+    }
 
     // Used the first time, when hints.txt doesn't exist yet
-    private static string[] defaultLines =
+    private static readonly string[] DefaultLines =
     {
         "# Repair hints: words;hint;question to ask the seller",
         "# Words are separated by commas. Use + when ALL parts must be there, like: ps5+geen beeld",
@@ -33,20 +46,21 @@ public class RepairHints
         "accu kapot,accu slecht,accu defect,batterij kapot,batterij slecht,batterij defect;💡 Bad battery: usually an easy, cheap swap;Werkt hij wel als hij aan de lader zit?",
         "geen signaal,no signal;💡 \"No signal\": often the cable or the source, sometimes the main board;Heb je hem met een andere kabel en een ander apparaat geprobeerd?",
         "ventilator+lawaai,maakt lawaai,veel herrie;💡 Loud fan: usually dust, clean it and use new thermal paste;Is hij ooit schoongemaakt?"
-        
     };
 
     public void Load()
     {
-        if (!File.Exists("hints.txt"))
+        string filePath = AppFiles.PathFor("hints.txt");
+        if (!File.Exists(filePath))
         {
-            File.WriteAllLines("hints.txt", defaultLines);
+            File.WriteAllLines(filePath, DefaultLines);
         }
 
-        foreach (string line in File.ReadAllLines("hints.txt"))
+        List<RepairHint> loaded = new List<RepairHint>();
+        foreach (string line in File.ReadAllLines(filePath))
         {
-            // skip empty lines and comments
-            if (line.Trim() == "" || line.StartsWith("#"))
+            string trimmed = line.Trim();
+            if (trimmed == "" || trimmed.StartsWith("#"))
             {
                 continue;
             }
@@ -57,24 +71,56 @@ public class RepairHints
                 continue;
             }
 
-            RepairHint rule = new RepairHint();
-            rule.Words = parts[0].ToLower().Split(',');
-            rule.Text = parts[1].Trim();
-            if (parts.Length > 2)
+            RepairHint rule = new RepairHint
             {
-                rule.Question = parts[2].Trim();
-            }
+                Words = parts[0].ToLowerInvariant().Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries),
+                Text = parts[1].Trim(),
+                Question = parts.Length > 2 ? parts[2].Trim() : ""
+            };
 
-            rules.Add(rule);
+            if (rule.Words.Length > 0)
+            {
+                loaded.Add(rule);
+            }
         }
+
+        lock (syncLock)
+        {
+            rules.Clear();
+            rules.AddRange(loaded);
+            lastFileWriteUtc = File.GetLastWriteTimeUtc(filePath);
+        }
+    }
+
+    public bool ReloadIfChanged()
+    {
+        string filePath = AppFiles.PathFor("hints.txt");
+        if (!File.Exists(filePath))
+        {
+            return false;
+        }
+
+        DateTime writeUtc = File.GetLastWriteTimeUtc(filePath);
+        if (writeUtc <= lastFileWriteUtc)
+        {
+            return false;
+        }
+
+        Load();
+        return true;
     }
 
     // Gives back the first rule that fits the text, or null if none fits
     public RepairHint? Find(string text)
     {
-        string lowerText = text.ToLower();
+        string lowerText = text.ToLowerInvariant();
+        List<RepairHint> snapshot;
+        lock (syncLock)
+        {
+            snapshot = rules.ToList();
+        }
 
-        foreach (RepairHint rule in rules)
+        foreach (RepairHint rule in snapshot)
         {
             foreach (string option in rule.Words)
             {
@@ -99,8 +145,7 @@ public class RepairHints
         return null;
     }
 
-    // True if the word is in the text, but not right after "geen " or "zonder "
-    // So "geen stickdrift" doesn't count as stick drift.
+    // True if the word is in the text, but not right after a whole-word "geen" or "zonder".
     private static bool HasWord(string text, string word)
     {
         if (word == "")
@@ -108,16 +153,16 @@ public class RepairHints
             return false;
         }
 
-        int index = text.IndexOf(word);
+        int index = text.IndexOf(word, StringComparison.Ordinal);
         while (index >= 0)
         {
             string before = text.Substring(0, index);
-            if (!before.EndsWith("geen ") && !before.EndsWith("zonder "))
+            if (!NegationBeforeWord.IsMatch(before))
             {
                 return true;
             }
 
-            index = text.IndexOf(word, index + 1);
+            index = text.IndexOf(word, index + 1, StringComparison.Ordinal);
         }
 
         return false;
