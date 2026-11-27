@@ -9,6 +9,7 @@ obj/
 
 # Private files - never upload these
 secrets.txt
+searches.txt
 seen.txt
 *.kate-swp
 *.swp
