@@ -9,7 +9,7 @@ public class UserManager
     private readonly string token;
     private readonly HttpClient telegramClient;
     private readonly HttpClient marktplaatsClient;
-    private readonly Action<UserSession> wireSession;
+    private readonly Action<UserSession, UserManager> wireSession;
 
     private readonly Dictionary<string, UserSession> sessions =
         new Dictionary<string, UserSession>(StringComparer.Ordinal);
@@ -24,7 +24,7 @@ public class UserManager
         string token,
         HttpClient telegramClient,
         HttpClient marktplaatsClient,
-        Action<UserSession> wireSession)
+        Action<UserSession, UserManager> wireSession)
     {
         Owner = owner;
         this.token = token;
@@ -34,7 +34,7 @@ public class UserManager
         usersRootDir = Path.Combine(AppFiles.DataDirectory, "users");
 
         sessions[owner.ChatId] = owner;
-        wireSession(owner);
+        wireSession(owner, this);
     }
 
     public void LoadInvitedUsers()
@@ -80,7 +80,7 @@ public class UserManager
                 }
 
                 sessions[session.ChatId] = session;
-                wireSession(session);
+                wireSession(session, this);
                 BotLog.Write($"Loaded user '{session.Name}' ({session.SearchList.Rules.Count} searches).");
             }
             catch (Exception ex)
@@ -143,7 +143,7 @@ public class UserManager
         session.LoadData();
         session.SaveProfile();
         sessions[chatId] = session;
-        wireSession(session);
+        wireSession(session, this);
 
         created = session;
         message = "";

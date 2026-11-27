@@ -409,7 +409,7 @@ userManager = new UserManager(
     token,
     telegramClient,
     marktplaatsClient,
-    wireSession: session =>
+    wireSession: (session,manager) =>
     {
         session.Commands = new CommandHandler(
             session,
