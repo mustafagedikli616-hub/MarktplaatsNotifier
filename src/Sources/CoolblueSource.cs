@@ -283,6 +283,33 @@ public class CoolblueSource
         return ads;
     }
 
+    // Strict price-error filter: only alert when Coolblue Tweedekans is way below max price (<=65%, max €200)
+    // AND at least 40% below Nieuwprijs when retail price is known.
+    public static bool IsPriceErrorDeal(Listing ad, int ruleMaxPrice)
+    {
+        if (ad.Price <= 0 || ruleMaxPrice <= 0)
+        {
+            return false;
+        }
+
+        double strictCap = Math.Min(ruleMaxPrice * 0.65, 200.0);
+        if (ad.Price > strictCap)
+        {
+            return false;
+        }
+
+        if (ad.OldPrice > 0)
+        {
+            double discountPct = (ad.OldPrice - ad.Price) / ad.OldPrice;
+            if (discountPct < 0.40)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private static double ParseEuroParts(string eurosStr, string centsStr)
     {
         if (!int.TryParse(eurosStr, out int euros))

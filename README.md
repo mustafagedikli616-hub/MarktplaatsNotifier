@@ -5,7 +5,7 @@
 ![Telegram](https://img.shields.io/badge/Telegram_Bot-26A5E4?logo=telegram&logoColor=white)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
-A C# console app that watches [Marktplaats.nl](https://www.marktplaats.nl) — plus **Tweakers V&A**, **2dehands.be**, **Kleinanzeigen.de**, **Coolblue Tweedekans**, and **Vinted.nl** — and pings you on Telegram and in a local web dashboard as soon as something interesting pops up. Much faster than Marktplaats' own saved searches.
+A C# console app that watches [Marktplaats.nl](https://www.marktplaats.nl) — plus **Tweakers V&A**, **2dehands.be**, **Coolblue Tweedekans**, and **Vinted.nl** — and pings you on Telegram and in a local web dashboard as soon as something interesting pops up. Much faster than Marktplaats' own saved searches.
 
 I built this to catch cheap broken monitors, PCs, and PC parts to repair and resell before anyone else sees them.
 
@@ -22,9 +22,8 @@ I built this to catch cheap broken monitors, PCs, and PC parts to repair and res
 - **30-day history (`history.txt`):** catches price drops, shows the typical median price (`/price`), flags reposts by text or perceptual photo hash (`dHash`), and finds old unsold ads (`/stale`) where sellers are more likely to take a lower offer.
 - **Extra sources (each toggleable in `/settings` and the Web UI):**
   - **Tweakers Vraag & Aanbod** RSS feed (`tweakers.net/feeds/va/aanbod.xml`)
-  - **2dehands.be** (Belgium) for shipped deals
-  - **Kleinanzeigen.de** (Germany) filtered to `Versand möglich`
-  - **Coolblue Tweedekans** open-box/returned tech deals with retail discount + warranty
+  - **2dehands.be** (Belgium) for shipped GPUs, CPUs & RAM with a strict 85% price cap
+  - **Coolblue Tweedekans** open-box/returned tech deals filtered strictly to real price errors (40%+ off retail & low cap)
   - **Vinted.nl** for consoles, controllers, and electronics
 - **Repair hints (`hints.txt`):** matches common fault descriptions and adds a repair tip + a Dutch question you can copy and send to the seller.
 - **Optional Vision AI check (`/ai`):** sends ads that pass all filters (plus up to 2 photos) to Gemini (free tier works great), Groq, OpenRouter, Claude, OpenAI, or local Ollama to spot things like cracked screens in photos.

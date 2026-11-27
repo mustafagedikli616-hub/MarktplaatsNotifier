@@ -94,14 +94,20 @@ try
     string sample2dh = """{"listings":[{"itemId":"m2470060087","title":"Gaming Monitor 144Hz","description":"Prima staat","priceInfo":{"priceCents":6500,"priceType":"FIXED"},"location":{"cityName":"Antwerpen"},"vipUrl":"/v/computers/m2470060087","attributes":[{"key":"delivery","value":"Verzenden"}]}]}""";
     List<Listing> beAds = TweedehandsSource.ParseJson(sample2dh);
     Check("TweedehandsSource parses 2dehands.be JSON", beAds.Count == 1 && beAds[0].Id == "2dh-m2470060087" && beAds[0].Price == 65 && beAds[0].Source == "2dehands.be" && beAds[0].CanShip && beAds[0].Link.StartsWith("https://www.2dehands.be/"));
-
-    string sampleKa = """<article class="flex" data-adid="3583306457" data-href="/s-anzeige/dell-monitor/3583306457-225-1"><script type="application/ld+json">{"title":"DELL G2725D 27 Zoll Monitor","description":"Top Zustand","contentUrl":"https://img.kleinanzeigen.de/1.jpg"}</script><div>71729 Erdmannhausen</div><div>80 € VB</div><div>Versand möglich</div></article>""";
-    List<Listing> kaAds = KleinanzeigenSource.ParseHtml(sampleKa);
-    Check("KleinanzeigenSource parses article + JSON-LD + shipping", kaAds.Count == 1 && kaAds[0].Id == "ka-3583306457" && kaAds[0].Price == 80 && kaAds[0].CanShip && kaAds[0].Source == "Kleinanzeigen" && kaAds[0].City.Contains("71729"));
+    Check("TweedehandsSource allows GPUs/CPUs/RAM and rejects monitors/PCs",
+        TweedehandsSource.IsEligibleRule(new SearchRule { Query = "rtx 4070", MaxPrice = 300 }) &&
+        TweedehandsSource.IsEligibleRule(new SearchRule { Query = "5800x3d", MaxPrice = 180 }) &&
+        TweedehandsSource.IsEligibleRule(new SearchRule { Query = "ddr5 32gb", MaxPrice = 65 }) &&
+        !TweedehandsSource.IsEligibleRule(new SearchRule { Query = "defect monitor", MaxPrice = 100 }) &&
+        !TweedehandsSource.IsEligibleRule(new SearchRule { Query = "game pc defect", MaxPrice = 150 }) &&
+        TweedehandsSource.StrictMaxPrice(100) == 85);
 
     string sampleCb = """<script type="application/ld+json">{"@type":"ItemList","itemListElement":[{"productID":895125,"name":"Philips 346E2CUAE/00","image":["https://image.coolblue.nl/500x500/products/1653893"],"offers":{"price":219}}]}</script><a href="https://www.coolblue.nl/product-tweedekans/895125/3100497">Philips 346E2CUAE/00</a><div>Onbeschadigd</div><div>Nieuwprijs 219 ,- 198 ,-</div>""";
     List<Listing> cbAds = CoolblueSource.ParseHtml(sampleCb);
     Check("CoolblueSource parses Tweedekans price, retail discount, and condition", cbAds.Count == 1 && cbAds[0].Id == "cb-3100497" && cbAds[0].Price == 198 && cbAds[0].OldPrice == 219 && cbAds[0].Condition == "Onbeschadigd" && cbAds[0].Source == "Coolblue Tweedekans");
+    Check("CoolblueSource rejects normal discounts and allows real price errors",
+        !CoolblueSource.IsPriceErrorDeal(new Listing { Price = 198, OldPrice = 219 }, 250) &&
+        CoolblueSource.IsPriceErrorDeal(new Listing { Price = 79, OldPrice = 219 }, 150));
 
     string sampleVinted = """<div data-testid="product-item-id-10982054445"><img src="https://images1.vinted.net/t/1.webp" alt="Vendo nintendo switch, Merk: Nintendo, Staat: Heel goed, 100.00 €, 105.70 €" data-testid="product-item-id-10982054445--image--img"/><a href="/items/10982054445-vendo-nintendo-switch?referrer=catalog" data-testid="product-item-id-10982054445--overlay-link"></a></div>""";
     List<Listing> vAds = VintedSource.ParseHtml(sampleVinted);
@@ -187,18 +193,23 @@ try
     var pcResp = await webClient.PostAsync("/api/price-check", new StringContent("""{"query":"rtx 3070"}""", Encoding.UTF8, "application/json"));
     Check("POST /api/price-check returns computed median", pcResp.IsSuccessStatusCode && (await pcResp.Content.ReadAsStringAsync()).Contains("120"));
 
-    // SSE /api/events live push verification
-    using CancellationTokenSource sseCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    // SSE /api/events live push verification (client is registered before ": connected" is written)
+    using CancellationTokenSource sseCts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
     using HttpResponseMessage sseResp = await webClient.GetAsync("/api/events", HttpCompletionOption.ResponseHeadersRead, sseCts.Token);
     using StreamReader sseReader = new StreamReader(await sseResp.Content.ReadAsStreamAsync(sseCts.Token));
     string? firstLine = await sseReader.ReadLineAsync(sseCts.Token);
     web.BroadcastUpdate();
-    string? line2 = await sseReader.ReadLineAsync(sseCts.Token);
-    string? line3 = await sseReader.ReadLineAsync(sseCts.Token);
+    bool gotUpdate = false;
+    for (int i = 0; i < 6 && !gotUpdate; i++)
+    {
+        string? line = await sseReader.ReadLineAsync(sseCts.Token);
+        if (line == null) break;
+        if (line == "event: update") gotUpdate = true;
+    }
     Check("GET /api/events streams live SSE update event",
         sseResp.Content.Headers.ContentType?.MediaType == "text/event-stream" &&
         firstLine == ": connected" &&
-        (line2 == "event: update" || line3 == "event: update"));
+        gotUpdate);
 
     byte[] zip = await webClient.GetByteArrayAsync("/api/backup");
     Check("GET /api/backup produces valid .zip", zip.Length > 200 && zip[0] == (byte)'P' && zip[1] == (byte)'K');

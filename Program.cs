@@ -219,7 +219,6 @@ hints.Load();
 RequestLimiter limiter = new RequestLimiter();
 TweakersSource tweakersSource = new TweakersSource();
 TweedehandsSource tweedehandsSource = new TweedehandsSource();
-KleinanzeigenSource kleinanzeigenSource = new KleinanzeigenSource();
 CoolblueSource coolblueSource = new CoolblueSource();
 VintedSource vintedSource = new VintedSource();
 DateTime skipDetailsUntil = DateTime.MinValue;
@@ -1543,7 +1542,7 @@ async Task CheckTweakersFeed()
 
 async Task CheckExtraSources()
 {
-    // 1. Coolblue Tweedekans (slow category rotation, matched against all user searches)
+    // 1. Coolblue Tweedekans (slow category rotation, strict price-error filter only)
     if (userManager.AllUsers.Any(u => !u.Paused && u.OnboardingComplete && u.Settings.EnableCoolblue))
     {
         List<Listing> cbAds = await coolblueSource.FetchNextCategoryIfDueAsync(marktplaatsClient, TimeSpan.FromSeconds(75));
@@ -1558,14 +1557,14 @@ async Task CheckExtraSources()
 
                 foreach (SearchRule rule in u.SearchList.GetRulesSnapshot())
                 {
-                    if (!Filters.MatchesSearch(rule.Query, ad))
+                    if (!Filters.MatchesSearch(rule.Query, ad) || !CoolblueSource.IsPriceErrorDeal(ad, rule.MaxPrice))
                     {
                         continue;
                     }
 
                     u.History.Remember(ad, rule.Query);
                     u.Stats.RecordNew(rule.Query);
-                    if (await TrySend(u, ad, rule.Query))
+                    if (await TrySend(u, ad, rule.Query, "PRICE ERROR"))
                     {
                         break;
                     }
@@ -1574,8 +1573,8 @@ async Task CheckExtraSources()
         }
     }
 
-    // Helper for per-query round-robin sources (2dehands.be, Kleinanzeigen.de, Vinted.nl)
-    List<SearchRule> CollectActiveRules(Func<BotSettings, bool> isEnabled)
+    // Helper for per-query round-robin sources (2dehands.be, Vinted.nl)
+    List<SearchRule> CollectActiveRules(Func<BotSettings, bool> isEnabled, Func<SearchRule, bool>? ruleFilter = null)
     {
         Dictionary<string, SearchRule> merged = new Dictionary<string, SearchRule>(StringComparer.OrdinalIgnoreCase);
         foreach (UserSession u in userManager.AllUsers)
@@ -1587,6 +1586,11 @@ async Task CheckExtraSources()
 
             foreach (SearchRule r in u.SearchList.GetRulesSnapshot())
             {
+                if (ruleFilter != null && !ruleFilter(r))
+                {
+                    continue;
+                }
+
                 if (!merged.TryGetValue(r.Query, out SearchRule? existing) || r.MaxPrice > existing.MaxPrice || (r.Urgent && !existing.Urgent))
                 {
                     merged[r.Query] = r;
@@ -1596,7 +1600,11 @@ async Task CheckExtraSources()
         return merged.Values.ToList();
     }
 
-    async Task DispatchQueryResults(string query, List<Listing> ads, Func<BotSettings, bool> isEnabled)
+    async Task DispatchQueryResults(
+        string query,
+        List<Listing> ads,
+        Func<BotSettings, bool> isEnabled,
+        Func<Listing, SearchRule, bool>? extraFilter = null)
     {
         if (query == "" || ads.Count == 0)
         {
@@ -1617,6 +1625,11 @@ async Task CheckExtraSources()
                     continue;
                 }
 
+                if (extraFilter != null && !extraFilter(ad, userRule))
+                {
+                    continue;
+                }
+
                 u.History.Remember(ad, userRule.Query);
                 u.Stats.RecordNew(userRule.Query);
                 await TrySend(u, ad, userRule.Query);
@@ -1624,25 +1637,23 @@ async Task CheckExtraSources()
         }
     }
 
-    // 2. 2dehands.be (at most 1 request every 25s, each query every ~4 min)
-    List<SearchRule> beRules = CollectActiveRules(s => s.EnableTweedehands);
+    // 2. 2dehands.be (GPUs, CPUs, RAM only, shipped, strict 85% cap; at most 1 request every 25s)
+    List<SearchRule> beRules = CollectActiveRules(s => s.EnableTweedehands, TweedehandsSource.IsEligibleRule);
     if (beRules.Count > 0)
     {
         var (beQuery, beAds) = await tweedehandsSource.FetchNextDueAsync(
             marktplaatsClient, beRules, TimeSpan.FromSeconds(25), TimeSpan.FromMinutes(4));
-        await DispatchQueryResults(beQuery, beAds, s => s.EnableTweedehands);
+        await DispatchQueryResults(
+            beQuery,
+            beAds,
+            s => s.EnableTweedehands,
+            (ad, r) => TweedehandsSource.IsEligibleRule(r) &&
+                       ad.CanShip &&
+                       ad.Price > 0 &&
+                       ad.Price <= TweedehandsSource.StrictMaxPrice(r.MaxPrice));
     }
 
-    // 3. Kleinanzeigen.de (at most 1 request every 30s, each query every ~5 min)
-    List<SearchRule> deRules = CollectActiveRules(s => s.EnableKleinanzeigen);
-    if (deRules.Count > 0)
-    {
-        var (deQuery, deAds) = await kleinanzeigenSource.FetchNextDueAsync(
-            marktplaatsClient, deRules, TimeSpan.FromSeconds(30), TimeSpan.FromMinutes(5));
-        await DispatchQueryResults(deQuery, deAds, s => s.EnableKleinanzeigen);
-    }
-
-    // 4. Vinted.nl (at most 1 request every 30s, each query every ~5 min)
+    // 3. Vinted.nl (at most 1 request every 30s, each query every ~5 min)
     List<SearchRule> vintedRules = CollectActiveRules(s => s.EnableVinted);
     if (vintedRules.Count > 0)
     {

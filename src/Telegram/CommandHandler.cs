@@ -2116,13 +2116,6 @@ public class CommandHandler
             await session.Telegram.AnswerCallbackQuery(callbackId, session.Settings.EnableTweedehands ? "2dehands.be ON" : "2dehands.be OFF");
             await SendSettingsMenu(messageId);
         }
-        else if (settingAction == "kleinanzeigen")
-        {
-            session.Settings.EnableKleinanzeigen = !session.Settings.EnableKleinanzeigen;
-            session.Settings.Save();
-            await session.Telegram.AnswerCallbackQuery(callbackId, session.Settings.EnableKleinanzeigen ? "Kleinanzeigen.de ON" : "Kleinanzeigen.de OFF");
-            await SendSettingsMenu(messageId);
-        }
         else if (settingAction == "coolblue")
         {
             session.Settings.EnableCoolblue = !session.Settings.EnableCoolblue;
@@ -2828,7 +2821,7 @@ public class CommandHandler
             $"💬 {L("Skip high price in description", "Hoge prijs in tekst overslaan")}: <b>{descPriceText}</b>\n" +
             $"⚡ {L("Fast 35s category feed", "Snelle 35s categorie-check")}: <b>{(s.FastCategoryMode ? "ON" : "OFF")}</b>\n" +
             $"🔧 Tweakers V&amp;A: <b>{(s.EnableTweakers ? "ON" : "OFF")}</b> · 🇧🇪 2dehands: <b>{(s.EnableTweedehands ? "ON" : "OFF")}</b>\n" +
-            $"🇩🇪 Kleinanzeigen: <b>{(s.EnableKleinanzeigen ? "ON" : "OFF")}</b> · 🔵 Coolblue: <b>{(s.EnableCoolblue ? "ON" : "OFF")}</b> · 🛍️ Vinted: <b>{(s.EnableVinted ? "ON" : "OFF")}</b>\n" +
+            $"🔵 Coolblue: <b>{(s.EnableCoolblue ? "ON" : "OFF")}</b> · 🛍️ Vinted: <b>{(s.EnableVinted ? "ON" : "OFF")}</b>\n" +
             $"☀️ {L("Morning digest", "Ochtendoverzicht")}: <b>{digestText}</b>";
 
         string markup = Telegram.InlineKeyboard(new[]
@@ -2854,14 +2847,13 @@ public class CommandHandler
             new[]
             {
                 Telegram.CallbackButton(s.EnableTweedehands ? "🇧🇪 2dehands: ON" : "🇧🇪 2dehands: OFF", "set:2dehands"),
-                Telegram.CallbackButton(s.EnableKleinanzeigen ? "🇩🇪 Kleinanzeigen: ON" : "🇩🇪 Kleinanzeigen: OFF", "set:kleinanzeigen")
+                Telegram.CallbackButton(s.EnableCoolblue ? "🔵 Coolblue: ON" : "🔵 Coolblue: OFF", "set:coolblue")
             },
             new[]
             {
-                Telegram.CallbackButton(s.EnableCoolblue ? "🔵 Coolblue: ON" : "🔵 Coolblue: OFF", "set:coolblue"),
-                Telegram.CallbackButton(s.EnableVinted ? "🛍️ Vinted: ON" : "🛍️ Vinted: OFF", "set:vinted")
+                Telegram.CallbackButton(s.EnableVinted ? "🛍️ Vinted: ON" : "🛍️ Vinted: OFF", "set:vinted"),
+                Telegram.CallbackButton(s.MorningDigestEnabled ? "☀️ Digest: ON" : "☀️ Digest: OFF", "set:digest")
             },
-            new[] { Telegram.CallbackButton(s.MorningDigestEnabled ? "☀️ Morning digest: ON" : "☀️ Morning digest: OFF", "set:digest") },
             new[] { Telegram.CallbackButton("🏠 Menu", "menu:home") }
         });
 

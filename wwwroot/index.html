@@ -1009,15 +1009,11 @@
             <input type="checkbox" class="toggle" id="setTweakers">
           </div>
           <div class="form-row">
-            <div><div class="form-label">2dehands.be (Belgium)</div><div class="form-help">Also check Belgian Marktplaats sibling for shipped deals</div></div>
+            <div><div class="form-label">2dehands.be (Belgium)</div><div class="form-help">Shipped GPUs, CPUs &amp; RAM only (strict 85% price cap)</div></div>
             <input type="checkbox" class="toggle" id="setTweedehands">
           </div>
           <div class="form-row">
-            <div><div class="form-label">Kleinanzeigen.de (Germany)</div><div class="form-help">Watch German listings with Versand möglich</div></div>
-            <input type="checkbox" class="toggle" id="setKleinanzeigen">
-          </div>
-          <div class="form-row">
-            <div><div class="form-label">Coolblue Tweedekans</div><div class="form-help">Watch Coolblue returned/open-box tech deals with warranty</div></div>
+            <div><div class="form-label">Coolblue Tweedekans</div><div class="form-help">Real price errors only (40%+ off retail &amp; strict cap)</div></div>
             <input type="checkbox" class="toggle" id="setCoolblue">
           </div>
           <div class="form-row">
@@ -1300,7 +1296,6 @@ let state = {
     fastCategoryMode: true,
     enableTweakers: true,
     enableTweedehands: true,
-    enableKleinanzeigen: true,
     enableCoolblue: true,
     enableVinted: true,
     aiEnabled: true,
@@ -1720,7 +1715,6 @@ function renderSettings() {
   document.getElementById("setFastCat").checked = s.fastCategoryMode !== false;
   document.getElementById("setTweakers").checked = s.enableTweakers !== false;
   document.getElementById("setTweedehands").checked = s.enableTweedehands !== false;
-  document.getElementById("setKleinanzeigen").checked = s.enableKleinanzeigen !== false;
   document.getElementById("setCoolblue").checked = s.enableCoolblue !== false;
   document.getElementById("setVinted").checked = s.enableVinted !== false;
 
@@ -2276,7 +2270,6 @@ async function saveSettings() {
   state.settings.fastCategoryMode = document.getElementById("setFastCat").checked;
   state.settings.enableTweakers = document.getElementById("setTweakers").checked;
   state.settings.enableTweedehands = document.getElementById("setTweedehands").checked;
-  state.settings.enableKleinanzeigen = document.getElementById("setKleinanzeigen").checked;
   state.settings.enableCoolblue = document.getElementById("setCoolblue").checked;
   state.settings.enableVinted = document.getElementById("setVinted").checked;
 

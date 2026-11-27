@@ -44,7 +44,6 @@ public class Telegram
         {
             "tweakers" => "🔗 Bekijk op Tweakers",
             "2dehands.be" => "🔗 Bekijk op 2dehands.be",
-            "kleinanzeigen" => "🔗 Bekijk op Kleinanzeigen",
             "coolblue tweedekans" => "🔗 Bekijk op Coolblue",
             "vinted" => "🔗 Bekijk op Vinted",
             _ => "🔗 Bekijk op Marktplaats"
@@ -243,7 +242,6 @@ public class Telegram
         {
             "tweakers" => "🔧 <b>Tweakers V&amp;A</b>\n",
             "2dehands.be" => "🇧🇪 <b>2dehands.be</b>\n",
-            "kleinanzeigen" => "🇩🇪 <b>Kleinanzeigen.de</b>\n",
             "coolblue tweedekans" => "🔵 <b>Coolblue Tweedekans</b>\n",
             "vinted" => "🛍️ <b>Vinted</b>\n",
             _ => ""

@@ -8,9 +8,8 @@ All notable changes to Marktplaats Notifier are listed here.
 - **Built-in Web Dashboard (`http://localhost:5050`):** runs next to the Telegram bot with live Server-Sent Events (`/api/events`), browser notifications + sound chime, skip-reason breakdown, bulk search actions, watchlist, flip calculator + monthly profit chart, live market price check, filter/hint tester, logs, settings, and `.zip` backup download. Supports `WEB_PORT` and `WEB_PASSWORD`.
 - **Multi-source deal monitoring (each toggleable in `/settings` and Web UI):**
   - **Tweakers Vraag & Aanbod** (`tweakers.net/feeds/va/aanbod.xml`, skipping `V:` / `Gevraagd:` wanted posts).
-  - **2dehands.be** (Belgium, same JSON search API as Marktplaats).
-  - **Kleinanzeigen.de** (Germany, newest-first with `Versand möglich` shipping detection).
-  - **Coolblue Tweedekans** (open-box/returned tech deals with retail discount and condition).
+  - **2dehands.be** (Belgium, shipped GPUs/CPUs/RAM only with strict 85% price cap).
+  - **Coolblue Tweedekans** (open-box/returned tech deals filtered strictly to real price errors: 40%+ off retail & strict cap).
   - **Vinted.nl** (newest-first catalog cards with price, brand, and condition).
 - **Photo repost detection (`ImageHasher`):** pure-C# 64-bit JPEG `dHash` stored in `history.txt` to catch relisted items even when the title or seller changes.
 - **Market price lookup (`/price`):** estimates typical median price and suggested buy targets from 30-day history and live listings.

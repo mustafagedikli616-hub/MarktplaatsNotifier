@@ -6,10 +6,64 @@ namespace MarktplaatsNotifier;
 // Polls 2dehands.be (Belgium's Marktplaats sibling, same JSON API) in slow round-robin across active searches.
 public class TweedehandsSource
 {
+    private static readonly string[] AllowedComponentTokens =
+    {
+        "rtx", "gtx", "rx ", "radeon", "geforce", "videokaart", "gpu",
+        "ryzen", "5800x3d", "5700x", "5600", "7800x3d", "9800x3d",
+        "i5-", "i7-", "i9-", "core i5", "core i7", "core i9", "cpu", "processor",
+        "ddr4", "ddr5", "ram"
+    };
+
+    private static readonly string[] ExcludedBulkyTokens =
+    {
+        "monitor", "pc", "desktop", "behuizing", "kast", "tv", "ultrawide",
+        "odyssey", "ultragear", "laptop", "ps5", "ps4", "xbox", "switch", "voeding"
+    };
+
     private DateTime lastFetch = DateTime.MinValue;
     private DateTime blockedUntil = DateTime.MinValue;
     private readonly Dictionary<string, DateTime> lastCheckPerQuery = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, HashSet<string>> seenPerQuery = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+
+    // Only check expensive, small, robust components (GPUs, CPUs, RAM) on 2dehands.be
+    public static bool IsEligibleRule(SearchRule rule)
+    {
+        if (rule.MaxPrice < 40)
+        {
+            return false;
+        }
+
+        string q = " " + rule.Query.ToLowerInvariant() + " ";
+        foreach (string bulky in ExcludedBulkyTokens)
+        {
+            if (q.Contains(" " + bulky + " ", StringComparison.Ordinal) ||
+                q.Contains(bulky, StringComparison.Ordinal) && bulky.Length >= 4)
+            {
+                return false;
+            }
+        }
+
+        foreach (string token in AllowedComponentTokens)
+        {
+            if (token == "ram")
+            {
+                if (q.Contains(" ram ", StringComparison.Ordinal)) return true;
+                continue;
+            }
+            if (q.Contains(token, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // Stricter price cap for cross-border Belgian listings (15% buffer for shipping & risk)
+    public static int StrictMaxPrice(int ruleMaxPrice)
+    {
+        return Math.Max(1, (int)Math.Floor(ruleMaxPrice * 0.85));
+    }
 
     public async Task<(string Query, List<Listing> NewAds)> FetchNextDueAsync(
         HttpClient client,

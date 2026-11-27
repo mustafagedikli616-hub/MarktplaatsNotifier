@@ -52,7 +52,11 @@ public class WebDashboard : IDisposable
 
     public void Start()
     {
-        if (!TryBind($"http://+:{port}/") && !TryBind($"http://localhost:{port}/"))
+        bool bound = password != ""
+            ? (TryBind($"http://+:{port}/") || TryBind($"http://localhost:{port}/"))
+            : TryBind($"http://localhost:{port}/");
+
+        if (!bound)
         {
             BotLog.Write($"Couldn't start Web UI on port {port} (port may already be in use).");
             return;
@@ -61,7 +65,9 @@ public class WebDashboard : IDisposable
         Url = $"http://localhost:{port}";
         cts = new CancellationTokenSource();
         _ = Task.Run(() => ListenLoopAsync(cts.Token));
-        BotLog.Write($"Web UI: {Url}");
+        BotLog.Write(password != ""
+            ? $"Web UI: {Url} (password protected)"
+            : $"Web UI: {Url} (localhost only; set WEB_PASSWORD to allow LAN/remote access)");
     }
 
     private bool TryBind(string prefix)
@@ -428,7 +434,6 @@ public class WebDashboard : IDisposable
                     owner.Settings.FastCategoryMode = GetBool(sEl, "fastCategoryMode", owner.Settings.FastCategoryMode);
                     owner.Settings.EnableTweakers = GetBool(sEl, "enableTweakers", owner.Settings.EnableTweakers);
                     owner.Settings.EnableTweedehands = GetBool(sEl, "enableTweedehands", owner.Settings.EnableTweedehands);
-                    owner.Settings.EnableKleinanzeigen = GetBool(sEl, "enableKleinanzeigen", owner.Settings.EnableKleinanzeigen);
                     owner.Settings.EnableCoolblue = GetBool(sEl, "enableCoolblue", owner.Settings.EnableCoolblue);
                     owner.Settings.EnableVinted = GetBool(sEl, "enableVinted", owner.Settings.EnableVinted);
                     owner.Settings.AiEnabled = GetBool(sEl, "aiEnabled", owner.Settings.AiEnabled);
@@ -851,18 +856,19 @@ public class WebDashboard : IDisposable
         res.Headers.Add("X-Accel-Buffering", "no");
         res.SendChunked = true;
 
-        byte[] hello = Encoding.UTF8.GetBytes(": connected\n\n");
-        await res.OutputStream.WriteAsync(hello, ct);
-        await res.OutputStream.FlushAsync(ct);
-
+        // Register before sending ": connected" so a caller reacting to the first line never misses a broadcast
         lock (sseLock)
         {
             sseClients.Add(res);
         }
 
+        byte[] hello = Encoding.UTF8.GetBytes(": connected\n\n");
         byte[] ping = Encoding.UTF8.GetBytes(": ping\n\n");
         try
         {
+            await res.OutputStream.WriteAsync(hello, ct);
+            await res.OutputStream.FlushAsync(ct);
+
             while (!ct.IsCancellationRequested)
             {
                 await Task.Delay(TimeSpan.FromSeconds(20), ct);

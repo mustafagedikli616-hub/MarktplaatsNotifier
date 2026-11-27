@@ -51,9 +51,8 @@ Main loop (Program.cs):
 | `src/Sources/RequestLimiter.cs` | Adaptive delay between Marktplaats requests (2s with ±20% jitter, up to 60s on 429/403). |
 | `src/Sources/MarktplaatsUrlParser.cs` | Parses Marktplaats search URLs (for `/add`) and shared listing links (for Watchlist). |
 | `src/Sources/TweakersSource.cs` | Polls the Tweakers Vraag & Aanbod RSS feed (`tweakers.net/feeds/va/aanbod.xml`) and converts offers into listings. |
-| `src/Sources/TweedehandsSource.cs` | Round-robins searches against `2dehands.be/lrp/api/search` (same JSON format as Marktplaats). |
-| `src/Sources/KleinanzeigenSource.cs` | Round-robins searches against `kleinanzeigen.de` sorted newest-first, parsing article HTML + JSON-LD + `Versand möglich`. |
-| `src/Sources/CoolblueSource.cs` | Rotates through Coolblue Tweedekans tech categories and extracts open-box price, retail discount, and condition. |
+| `src/Sources/TweedehandsSource.cs` | Round-robins eligible component searches (GPUs, CPUs, RAM) against `2dehands.be/lrp/api/search` with a strict 85% price cap. |
+| `src/Sources/CoolblueSource.cs` | Rotates through Coolblue Tweedekans tech categories and only alerts on real price errors (40%+ off retail & strict cap). |
 | `src/Sources/VintedSource.cs` | Round-robins searches against Vinted.nl's newest-first SSR catalog cards. |
 | **Analysis (`src/Analysis/`)** | |
 | `src/Analysis/Filters.cs` | Skip-word matching (with clause-safe negation for `"geen"` / `"zonder"`), night-hour check, super-deal check, not-for-sale filter, and description price extraction. |

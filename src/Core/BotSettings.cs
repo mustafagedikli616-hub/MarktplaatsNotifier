@@ -14,7 +14,6 @@ public class BotSettings
     public bool FastCategoryMode { get; set; } = true;
     public bool EnableTweakers { get; set; } = true;
     public bool EnableTweedehands { get; set; } = true;
-    public bool EnableKleinanzeigen { get; set; } = true;
     public bool EnableCoolblue { get; set; } = true;
     public bool EnableVinted { get; set; } = true;
     public bool MorningDigestEnabled { get; set; } = true;
@@ -106,7 +105,6 @@ public class BotSettings
             FastCategoryMode = loaded.FastCategoryMode;
             EnableTweakers = loaded.EnableTweakers;
             EnableTweedehands = loaded.EnableTweedehands;
-            EnableKleinanzeigen = loaded.EnableKleinanzeigen;
             EnableCoolblue = loaded.EnableCoolblue;
             EnableVinted = loaded.EnableVinted;
             MorningDigestEnabled = loaded.MorningDigestEnabled;
