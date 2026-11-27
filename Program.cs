@@ -413,7 +413,7 @@ userManager = new UserManager(
     {
         session.Commands = new CommandHandler(
             session,
-            userManager,
+            manager,
             categoryNames,
             BuildStatusText,
             FetchSingleListingForWatch,
