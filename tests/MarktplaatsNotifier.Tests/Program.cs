@@ -37,7 +37,12 @@ try
     Check("Add full 5-field line preserves skipWords + urgent + subcategory",
         sl.Add("test item;99;356/2954;barst,water;urgent").StartsWith("✅") &&
         sl.Rules.TryGetValue("test item", out var r) &&
-        r.SubCategory == 2954 && r.Urgent && r.SkipWords.Length == 2);
+        r.SubCategory == 2954 && r.Urgent && !r.Defect && r.SkipWords.Length == 2);
+    Check("Add urgent,defect line round-trips both flags on disk",
+        sl.Add("defect gpu;120;322;water;urgent,defect").StartsWith("✅") &&
+        sl.Rules.TryGetValue("defect gpu", out var dr) && dr.Urgent && dr.Defect &&
+        File.ReadAllText(Path.Combine(simDir, "searches.txt")).Contains("defect gpu;120;322;water;urgent,defect"));
+    Check("Rejects unknown 5th-column flag", sl.Add("badflag;50;322;;banana").StartsWith("❌"));
     Check("Rejects /2954 without main category", sl.Add("bad;50;/2954").StartsWith("❌"));
     Check("Rejects negative price", sl.Add("neg;-10;322").StartsWith("❌"));
     Check("Case-insensitive duplicate check", sl.Add("TEST ITEM;50").StartsWith("⚠️"));
@@ -58,6 +63,19 @@ try
         Filters.MatchesSearch("rtx 3070", new Listing { Title = "MSI RTX3070 Gaming X" }));
     Check("ExtractMentionedPrice reads Vraagprijs €220", Filters.ExtractMentionedPrice("Goede monitor. Vraagprijs €220.") == 220);
     Check("ExtractMentionedPrice ignores nieuwprijs €500", Filters.ExtractMentionedPrice("Nieuwprijs €500, bieden graag") == 0);
+    Check("FindFaultWord catches broken condition & fault words, ignores negated",
+        Filters.FindFaultWord(new Listing { Condition = "Niet werkend", Title = "Monitor" }) == "niet werkend" &&
+        Filters.FindFaultWord(new Listing { Title = "PS5 geeft geen beeld meer" }) == "geen beeld" &&
+        Filters.FindFaultWord(new Listing { Title = "Monitor geen defect of barst, werkt top" }) == "");
+    Check("FindOldCpu skips 4th-gen Intel / FX on PC searches, allows modern CPUs & non-PC searches",
+        Filters.FindOldCpu(new Listing { Title = "Game PC i5-4570 GTX 970" }, "game pc") != "" &&
+        Filters.FindOldCpu(new Listing { Title = "Desktop AMD FX-8350" }, "pc defect") != "" &&
+        Filters.FindOldCpu(new Listing { Title = "Game PC Ryzen 5 5600 RTX 3060" }, "game pc") == "" &&
+        Filters.FindOldCpu(new Listing { Title = "Monitor gebruikt op i5-4570" }, "defect monitor") == "");
+    Check("FindScamSigns flags 0yr/0rev unverified shipping & off-platform payment phrases",
+        Filters.FindScamSigns(new Listing { Price = 200, SellerYears = 0, SellerReviewCount = 0, SellerVerified = false, CanShip = true }).Contains("0 yr") &&
+        Filters.FindScamSigns(new Listing { Price = 100, Description = "Alleen Tikkie vooruit, geen kopersbescherming" }).Contains("tikkie vooruit") &&
+        Filters.FindScamSigns(new Listing { Price = 100, SellerYears = 5, SellerReviewCount = 20, SellerVerified = true, CanShip = true }) == "");
 
     Console.WriteLine("\n=== 3. BusinessFilter, RepairHints & PriceLookup ===");
     Check("BVermeer is NOT flagged as BV", BusinessFilter.Score(new Listing { SellerName = "BVermeer", Title = "Monitor", Price = 50 }) == 0);
@@ -180,6 +198,11 @@ try
     Environment.SetEnvironmentVariable("WEB_PORT", "15058");
     Environment.SetEnvironmentVariable("WEB_PASSWORD", "");
     RequestLimiter lim = new RequestLimiter();
+    lim.LogRequest();
+    lim.LogRequest();
+    lim.Blocked(403);
+    Check("RequestLimiter tracks req/min, 403 blocks today, and 3-min cooldown",
+        lim.RequestsPerMinute >= 2.0 && lim.Blocks403Today == 1 && lim.PausedUntil > DateTime.Now.AddMinutes(2));
     using WebDashboard web = new WebDashboard(
         owner, hints, lim, DateTime.Now.AddMinutes(-2),
         (_, rule) => Task.FromResult($"Checked {rule.Query}"),

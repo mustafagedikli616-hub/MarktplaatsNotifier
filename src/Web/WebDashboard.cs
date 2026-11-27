@@ -216,6 +216,7 @@ public class WebDashboard : IDisposable
                 string category = GetStr(root, "category");
                 int subCategory = GetInt(root, "subCategory", 0);
                 bool urgent = GetBool(root, "urgent", false);
+                bool defect = GetBool(root, "defect", false);
                 string[] skipWords = GetStringArray(root, "skipWords");
 
                 if (MarktplaatsUrlParser.IsMarktplaatsSearchUrl(rawQuery) &&
@@ -247,7 +248,8 @@ public class WebDashboard : IDisposable
                     Category = category.Trim(),
                     SubCategory = Math.Max(0, subCategory),
                     SkipWords = skipWords,
-                    Urgent = urgent
+                    Urgent = urgent,
+                    Defect = defect
                 };
 
                 string msg = owner.SearchList.AddRule(rule);
@@ -283,6 +285,7 @@ public class WebDashboard : IDisposable
                         existing.Category = GetStr(root, "category", existing.Category);
                         existing.SubCategory = Math.Max(0, GetInt(root, "subCategory", existing.SubCategory));
                         existing.Urgent = GetBool(root, "urgent", existing.Urgent);
+                        existing.Defect = GetBool(root, "defect", existing.Defect);
                         if (root.TryGetProperty("skipWords", out _))
                         {
                             existing.SkipWords = GetStringArray(root, "skipWords");
@@ -599,6 +602,7 @@ public class WebDashboard : IDisposable
                 r.SubCategory,
                 r.SkipWords,
                 r.Urgent,
+                r.Defect,
                 sent = st?.Sent ?? 0,
                 skipped = st?.FilteredOut ?? 0
             };
@@ -827,8 +831,15 @@ public class WebDashboard : IDisposable
         {
             try
             {
-                client.OutputStream.Write(payload, 0, payload.Length);
-                client.OutputStream.Flush();
+                lock (sseLock)
+                {
+                    if (!sseClients.Contains(client))
+                    {
+                        continue;
+                    }
+                    client.OutputStream.Write(payload, 0, payload.Length);
+                    client.OutputStream.Flush();
+                }
             }
             catch
             {
@@ -856,24 +867,25 @@ public class WebDashboard : IDisposable
         res.Headers.Add("X-Accel-Buffering", "no");
         res.SendChunked = true;
 
-        // Register before sending ": connected" so a caller reacting to the first line never misses a broadcast
-        lock (sseLock)
-        {
-            sseClients.Add(res);
-        }
-
         byte[] hello = Encoding.UTF8.GetBytes(": connected\n\n");
         byte[] ping = Encoding.UTF8.GetBytes(": ping\n\n");
         try
         {
-            await res.OutputStream.WriteAsync(hello, ct);
-            await res.OutputStream.FlushAsync(ct);
+            lock (sseLock)
+            {
+                res.OutputStream.Write(hello, 0, hello.Length);
+                res.OutputStream.Flush();
+                sseClients.Add(res);
+            }
 
             while (!ct.IsCancellationRequested)
             {
                 await Task.Delay(TimeSpan.FromSeconds(20), ct);
-                await res.OutputStream.WriteAsync(ping, ct);
-                await res.OutputStream.FlushAsync(ct);
+                lock (sseLock)
+                {
+                    res.OutputStream.Write(ping, 0, ping.Length);
+                    res.OutputStream.Flush();
+                }
             }
         }
         catch
@@ -884,8 +896,8 @@ public class WebDashboard : IDisposable
             lock (sseLock)
             {
                 sseClients.Remove(res);
+                try { res.Close(); } catch { }
             }
-            try { res.Close(); } catch { }
         }
     }
 

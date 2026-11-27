@@ -11,6 +11,7 @@ public class SearchRule
     public int SubCategory { get; set; }
     public string[] SkipWords { get; set; } = Array.Empty<string>();
     public bool Urgent { get; set; }
+    public bool Defect { get; set; }
 }
 
 public class SearchList
@@ -389,11 +390,16 @@ public class SearchList
                 .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
         }
 
-        string urgent = parts.Length > 4 ? parts[4].Trim().ToLowerInvariant() : "";
-        if (urgent != "" && urgent != "urgent")
+        string[] flags = parts.Length > 4
+            ? parts[4].ToLowerInvariant().Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            : Array.Empty<string>();
+        foreach (string f in flags)
         {
-            error = $"{prefix}\"{urgent}\" is not valid. Use urgent, or leave it out.";
-            return false;
+            if (f != "urgent" && f != "defect")
+            {
+                error = $"{prefix}\"{f}\" is not valid. Use urgent, defect or urgent,defect, or leave it out.";
+                return false;
+            }
         }
 
         rule = new SearchRule
@@ -403,7 +409,8 @@ public class SearchList
             Category = category,
             SubCategory = subCategory,
             SkipWords = skipWords,
-            Urgent = urgent == "urgent"
+            Urgent = flags.Contains("urgent"),
+            Defect = flags.Contains("defect")
         };
         return true;
     }
@@ -417,9 +424,12 @@ public class SearchList
         }
 
         string skipPart = string.Join(",", rule.SkipWords);
-        if (rule.Urgent)
+        List<string> flagList = new List<string>();
+        if (rule.Urgent) flagList.Add("urgent");
+        if (rule.Defect) flagList.Add("defect");
+        if (flagList.Count > 0)
         {
-            return $"{rule.Query};{rule.MaxPrice};{categoryPart};{skipPart};urgent";
+            return $"{rule.Query};{rule.MaxPrice};{categoryPart};{skipPart};{string.Join(",", flagList)}";
         }
 
         if (skipPart != "")

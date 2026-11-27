@@ -295,6 +295,10 @@ public class Telegram
         {
             sb.Append($"🔁 {Encode(ad.RepostInfo)}\n");
         }
+        if (ad.FaultReason != "")
+        {
+            sb.Append($"{Encode(ad.FaultReason)}\n");
+        }
 
         sb.Append($"📍 {Encode(place)}");
         if (ad.Delivery != "")
@@ -359,13 +363,19 @@ public class Telegram
         }
         sb.Append($" · 📸 {ad.PhotoCount}\n");
 
-        // Scam radar warning for brand-new unverified accounts offering shipping on pricier items
-        double effectivePrice = ad.Price > 0 ? ad.Price : ad.HighestBid;
-        if (ad.SellerYears == 0 && ad.SellerReviewCount <= 0 && !ad.SellerVerified && ad.CanShip && effectivePrice >= 50)
+        if (ad.ScamWarning != "")
         {
-            sb.Append(dutch
-                ? "⚠️ Nieuw ongeverifieerd account (0 jr, 0 reviews) - pas op bij verzenden\n"
-                : "⚠️ New unverified account (0 yr, 0 reviews) - watch out with shipping\n");
+            sb.Append($"⚠️ <b>Scam check:</b> {Encode(ad.ScamWarning)}\n");
+        }
+        else
+        {
+            double effectivePrice = ad.Price > 0 ? ad.Price : ad.HighestBid;
+            if (ad.SellerYears == 0 && ad.SellerReviewCount <= 0 && !ad.SellerVerified && ad.CanShip && effectivePrice >= 50)
+            {
+                sb.Append(dutch
+                    ? "⚠️ Nieuw ongeverifieerd account (0 jr, 0 reviews) - pas op bij verzenden\n"
+                    : "⚠️ New unverified account (0 yr, 0 reviews) - watch out with shipping\n");
+            }
         }
 
         if (ad.Description != "")

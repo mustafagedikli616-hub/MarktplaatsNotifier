@@ -47,6 +47,8 @@ public class Listing
     public string RepostInfo { get; set; } = "";
     public int CategoryId { get; set; } = 0;
     public string CategoryName { get; set; } = "";
+    public string FaultReason { get; set; } = "";
+    public string ScamWarning { get; set; } = "";
     public string AiVerdict { get; set; } = "";
     public string AiReason { get; set; } = "";
     public string AiResale { get; set; } = "";

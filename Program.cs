@@ -263,13 +263,17 @@ string BuildStatusText(UserSession user)
     string aiStatus = user.Settings.AiEnabled
         ? $"\n🤖 AI: {user.Settings.AiProvider}/{user.Settings.AiModel} ({user.AiGrader.CallsToday}/{user.Settings.AiDailyLimit} today)"
         : "";
+    string pauseNote = DateTime.Now < limiter.PausedUntil
+        ? $"\n🛑 Cooling down until {limiter.PausedUntil:HH:mm}"
+        : "";
     return
         $"🤖 Status: {state}\n" +
         $"⏱️ Running for {(int)running.TotalHours} h {running.Minutes} min\n" +
         $"🔎 {user.SearchList.Rules.Count} searches, {user.ChecksDone} checks done\n" +
         $"📨 {user.ListingsSent} listings sent · 👀 {user.Watchlist.Count} watched\n" +
         $"📚 {user.History.Count} listings in history\n" +
-        $"🐢 {limiter.DelayMs} ms between requests" +
+        $"⚡ {limiter.RequestsPerMinute:0.0} req/min · 🐢 {limiter.DelayMs} ms · 🚫 {limiter.Blocks403Today}x 403 today" +
+        pauseNote +
         aiStatus +
         detailsStatus;
 }
@@ -292,6 +296,10 @@ async Task<string> CheckSearchNow(UserSession user, SearchRule rule)
         if (rule.Category != "")
         {
             url += $"&l1CategoryId={rule.Category}";
+        }
+        if (rule.SubCategory != 0)
+        {
+            url += $"&l2CategoryId={rule.SubCategory}";
         }
 
         string cacheKey = $"{rule.Query.ToLowerInvariant()}|{rule.Category}|{user.Postcode}";
@@ -689,6 +697,7 @@ async Task<List<Listing>> FetchListings(string url, string cacheKey, bool bypass
         searchReq.Headers.TryAddWithoutValidation("Sec-Fetch-Mode", "cors");
         searchReq.Headers.TryAddWithoutValidation("Sec-Fetch-Site", "same-origin");
 
+        limiter.LogRequest();
         using HttpResponseMessage searchResp = await marktplaatsClient.SendAsync(searchReq);
         searchResp.EnsureSuccessStatusCode();
         json = await searchResp.Content.ReadAsStringAsync();
@@ -913,6 +922,7 @@ async Task<(bool NotFound, bool Reserved)> AddPageDetails(Listing ad, bool alsoP
         pageReq.Headers.TryAddWithoutValidation("Sec-Fetch-Site", "same-origin");
         pageReq.Headers.TryAddWithoutValidation("Upgrade-Insecure-Requests", "1");
 
+        limiter.LogRequest();
         using HttpResponseMessage response = await marktplaatsClient.SendAsync(pageReq);
         if (response.StatusCode == HttpStatusCode.NotFound || response.StatusCode == HttpStatusCode.Gone)
         {
@@ -922,7 +932,7 @@ async Task<(bool NotFound, bool Reserved)> AddPageDetails(Listing ad, bool alsoP
         if (response.StatusCode == HttpStatusCode.TooManyRequests || response.StatusCode == HttpStatusCode.Forbidden)
         {
             skipDetailsUntil = DateTime.Now.AddMinutes(30);
-            limiter.Blocked();
+            limiter.Blocked((int)response.StatusCode);
             BotLog.Write($"Listing pages returned {(int)response.StatusCode}: skipping extra info for 30 minutes.");
             return (false, false);
         }
@@ -1290,6 +1300,39 @@ async Task<bool> TrySend(UserSession user, Listing ad, string search, string for
         ad.TypicalCount = count;
     }
 
+    if (rule.Defect)
+    {
+        string faultWord = Filters.FindFaultWord(ad);
+        if (faultWord != "")
+        {
+            ad.FaultReason = $"🛠️ Fault: {faultWord}";
+        }
+        else if (ad.Price > 0 && ad.TypicalPrice > 0 && ad.Price <= ad.TypicalPrice * 0.4)
+        {
+            ad.FaultReason = "🤔 No fault mentioned, but very cheap: ask what's wrong";
+        }
+        else
+        {
+            BotLog.Write($"Skipped (doesn't look broken): {ad.Title}");
+            user.Digest.RecordFilteredOut();
+            user.Stats.RecordFiltered(rule.Query);
+            user.Feed.RecordSkipped(ad, rule.Query, "Doesn't look broken (defect flag)", "other");
+            return false;
+        }
+    }
+
+    string oldCpu = Filters.FindOldCpu(ad, rule.Query);
+    if (oldCpu != "")
+    {
+        BotLog.Write($"Skipped (old CPU '{oldCpu}'): {ad.Title}");
+        user.Digest.RecordFilteredOut();
+        user.Stats.RecordFiltered(rule.Query);
+        user.Feed.RecordSkipped(ad, rule.Query, $"Old CPU: {oldCpu}", "other");
+        return false;
+    }
+
+    ad.ScamWarning = Filters.FindScamSigns(ad);
+
     // Compute perceptual thumbnail hash to catch reposts even when the seller changes the title
     if (ad.Photo != "" && ad.PhotoHash == "")
     {
@@ -1377,7 +1420,7 @@ async Task HandleError(string what, Exception ex)
         (httpError.StatusCode == HttpStatusCode.TooManyRequests ||
          httpError.StatusCode == HttpStatusCode.Forbidden))
     {
-        limiter.Blocked();
+        limiter.Blocked((int)httpError.StatusCode.Value);
     }
 }
 
@@ -1667,6 +1710,14 @@ while (true)
 {
     await CheckAutoReload();
     await CheckPeriodicTasks();
+
+    if (DateTime.Now < limiter.PausedUntil)
+    {
+        await PollTelegramUpdates();
+        await Task.Delay(1000);
+        continue;
+    }
+
     await CheckCategoryFirehose();
     await CheckTweakersFeed();
     await CheckExtraSources();
@@ -1695,6 +1746,10 @@ while (true)
         if (rule.Category != "")
         {
             url += $"&l1CategoryId={rule.Category}";
+        }
+        if (rule.SubCategory != 0)
+        {
+            url += $"&l2CategoryId={rule.SubCategory}";
         }
 
         string cacheKey = $"{rule.Query.ToLowerInvariant()}|{rule.Category}|{activeUser.Postcode}";
