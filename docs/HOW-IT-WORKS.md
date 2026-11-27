@@ -70,7 +70,7 @@ Main loop (Program.cs):
 | `src/Tracking/DailyDigest.cs` | Tracks today's counts and silent overnight listings for `/today` and the morning summary. |
 | `src/Tracking/ActivityFeed.cs` | Keeps recent sent/skipped/error events and daily skip-reason breakdown in memory for the web dashboard. |
 | **Telegram (`src/Telegram/`)** | |
-| `src/Telegram/CommandHandler.cs` | All Telegram commands, `/menu`, inline button callbacks, natural quick-add (`rtx 3070 under 140`), swipe-replies, starter packs, and `.zip` restore. |
+| `src/Telegram/CommandHandler.cs` & `Commands/*.cs` | Partial class split by feature (`Searches`, `Flips`, `Snooze`, `Blocklist`, `Watchlist`, `Ai`, `Settings`, `Menus`, `Onboarding`) handling all Telegram commands and callbacks. |
 | `src/Telegram/Telegram.cs` | Talks to the Telegram Bot API over HTTP POST (`sendMessage`, `sendPhoto`, `sendDocument`, `editMessageText`, `editMessageReplyMarkup`, `getFile`). |
 | **Web (`src/Web/` & `wwwroot/`)** | |
 | `src/Web/WebDashboard.cs` | Built-in `HttpListener` server (default `http://localhost:5050`), JSON REST API, SSE live feed (`/api/events`), and optional `WEB_PASSWORD` auth. |
