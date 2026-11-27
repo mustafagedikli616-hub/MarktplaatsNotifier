@@ -4,13 +4,14 @@ services:
     container_name: marktplaats-notifier
     restart: unless-stopped
     ports:
-      - "5050:5050"
+      # Bind to localhost only by default; keep port 5050 closed in cloud firewalls (e.g. Azure NSG)
+      - "127.0.0.1:5050:5050"
     environment:
       - TZ=Europe/Amsterdam
       - MARKTPLAATS_DATA_DIR=/data
       - WEB_PORT=5050
-      # Optional: protect the web UI with a password on a shared LAN
-      # - WEB_PASSWORD=change-me
+      # Required to expose the web UI beyond localhost (also set a strong password before deploying!)
+      # - WEB_PASSWORD=change-me-to-a-strong-password
       # Option A: fill these in for zero-file headless setup
       # - TELEGRAM_BOT_TOKEN=123456789:ABCdef...
       # - TELEGRAM_CHAT_ID=123456789
