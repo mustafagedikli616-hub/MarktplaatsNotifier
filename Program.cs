@@ -47,6 +47,14 @@ marktplaatsClient.DefaultRequestHeaders.Add("User-Agent",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36");
 marktplaatsClient.DefaultRequestHeaders.Add("Accept-Language", "nl-NL,nl;q=0.9,en;q=0.8");
 marktplaatsClient.DefaultRequestHeaders.Add("Referer", "https://www.marktplaats.nl/");
+HttpClient otherSitesClient = new HttpClient(new HttpClientHandler
+{
+    AutomaticDecompression = DecompressionMethods.All
+})
+{
+    Timeout = TimeSpan.FromSeconds(25)
+};
+otherSitesClient.DefaultRequestHeaders.Add("User-Agent", "MarktplaatsNotifier/1.0");
 
 HttpClient telegramClient = new HttpClient
 {
@@ -1555,7 +1563,7 @@ async Task CheckTweakersFeed()
         return;
     }
 
-    List<Listing> newAds = await tweakersSource.FetchNewIfDueAsync(marktplaatsClient, TimeSpan.FromSeconds(60));
+    List<Listing> newAds = await tweakersSource.FetchNewIfDueAsync(otherSitesClient, TimeSpan.FromSeconds(60));
     foreach (Listing ad in newAds)
     {
         foreach (UserSession u in userManager.AllUsers)
@@ -1685,7 +1693,7 @@ async Task CheckExtraSources()
     if (beRules.Count > 0)
     {
         var (beQuery, beAds) = await tweedehandsSource.FetchNextDueAsync(
-            marktplaatsClient, beRules, TimeSpan.FromSeconds(25), TimeSpan.FromMinutes(4));
+            otherSitesClient, beRules, TimeSpan.FromSeconds(25), TimeSpan.FromMinutes(4));
         await DispatchQueryResults(
             beQuery,
             beAds,
