@@ -468,9 +468,9 @@ public class Telegram
                 string photoJson = await PostAsync("sendPhoto", photoFields);
                 return ExtractMessageId(photoJson);
             }
-            catch (HttpRequestException)
+            catch (Exception ex) when (ex is HttpRequestException || ex is TaskCanceledException)
             {
-                BotLog.Write("Photo message failed, sending as text instead.");
+                BotLog.Write($"Photo message failed ({ex.Message}), sending as text instead.");
             }
         }
 
@@ -512,11 +512,46 @@ public class Telegram
 
     private async Task<string> PostAsync(string method, Dictionary<string, string> fields)
     {
-        using FormUrlEncodedContent content = new FormUrlEncodedContent(fields);
-        using HttpResponseMessage response =
-            await client.PostAsync($"https://api.telegram.org/bot{token}/{method}", content);
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadAsStringAsync();
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            using FormUrlEncodedContent content = new FormUrlEncodedContent(fields);
+            using HttpResponseMessage response =
+                await client.PostAsync($"https://api.telegram.org/bot{token}/{method}", content);
+
+            if (response.StatusCode == HttpStatusCode.TooManyRequests && attempt < 2)
+            {
+                string body = await response.Content.ReadAsStringAsync();
+                int retryAfter = ExtractRetryAfterSeconds(body);
+                BotLog.Write($"Telegram 429 on {method}: waiting {retryAfter}s before retrying...");
+                await Task.Delay(TimeSpan.FromSeconds(retryAfter));
+                continue;
+            }
+
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadAsStringAsync();
+        }
+
+        throw new HttpRequestException($"Telegram {method} failed after retries.");
+    }
+
+    private static int ExtractRetryAfterSeconds(string json)
+    {
+        try
+        {
+            using JsonDocument doc = JsonDocument.Parse(json);
+            if (doc.RootElement.TryGetProperty("parameters", out JsonElement p) &&
+                p.TryGetProperty("retry_after", out JsonElement ra) &&
+                ra.ValueKind == JsonValueKind.Number &&
+                ra.TryGetInt32(out int secs) && secs > 0)
+            {
+                return Math.Clamp(secs, 1, 120);
+            }
+        }
+        catch
+        {
+        }
+
+        return 5;
     }
 
     private static string Encode(string value) => WebUtility.HtmlEncode(value);

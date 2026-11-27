@@ -1208,12 +1208,14 @@ async Task<bool> TrySend(UserSession user, Listing ad, string search, string for
         return false;
     }
 
+    bool isVinted = ad.Source.Equals("Vinted", StringComparison.OrdinalIgnoreCase);
+
     string alert = "";
     if (forcedAlert != "")
     {
         alert = forcedAlert;
     }
-    else if (Filters.IsSuperDeal(ad, rule.MaxPrice))
+    else if ((!isVinted || ad.Price >= 20) && Filters.IsSuperDeal(ad, rule.MaxPrice))
     {
         alert = "SUPER DEAL";
     }
@@ -1294,7 +1296,8 @@ async Task<bool> TrySend(UserSession user, Listing ad, string search, string for
         ad.HintQuestion = hint.Question;
     }
 
-    if (ad.Price > 0)
+    // TypicalPrice comes from Marktplaats history; skip for Vinted so €4-€20 Vinted clutter never skews it
+    if (isMarktplaats && ad.Price > 0)
     {
         ad.TypicalPrice = user.History.TypicalPrice(rule.Query, ad.CategoryId, out int count);
         ad.TypicalCount = count;
@@ -1307,7 +1310,7 @@ async Task<bool> TrySend(UserSession user, Listing ad, string search, string for
         {
             ad.FaultReason = $"🛠️ Fault: {faultWord}";
         }
-        else if (ad.Price > 0 && ad.TypicalPrice > 0 && ad.Price <= ad.TypicalPrice * 0.4)
+        else if ((!isVinted || ad.Price >= 20) && ad.Price > 0 && ad.TypicalPrice > 0 && ad.Price <= ad.TypicalPrice * 0.4)
         {
             ad.FaultReason = "🤔 No fault mentioned, but very cheap: ask what's wrong";
         }
@@ -1386,7 +1389,16 @@ async Task<bool> TrySend(UserSession user, Listing ad, string search, string for
 
     bool night = Filters.IsNight(user.Settings);
     bool isWatched = user.Watchlist.Contains(ad.Id);
-    long sentMessageId = await user.Telegram.SendListing(ad, night, alert, isWatched, user.Settings.IsDutch);
+    long sentMessageId;
+    try
+    {
+        sentMessageId = await user.Telegram.SendListing(ad, night, alert, isWatched, user.Settings.IsDutch);
+    }
+    catch (Exception ex)
+    {
+        BotLog.Write($"Couldn't send '{ad.Title}' to Telegram: {ex.Message}");
+        return false;
+    }
     user.MarkSeen(ad.Id);
     user.RememberSentMessage(ad, sentMessageId);
     user.History.MarkPriceAlerted(ad.Id);
@@ -1647,7 +1659,8 @@ async Task CheckExtraSources()
         string query,
         List<Listing> ads,
         Func<BotSettings, bool> isEnabled,
-        Func<Listing, SearchRule, bool>? extraFilter = null)
+        Func<Listing, SearchRule, bool>? extraFilter = null,
+        bool recordHistory = true)
     {
         if (query == "" || ads.Count == 0)
         {
@@ -1673,15 +1686,23 @@ async Task CheckExtraSources()
                     continue;
                 }
 
-                u.History.Remember(ad, userRule.Query);
+                if (recordHistory)
+                {
+                    u.History.Remember(ad, userRule.Query);
+                }
                 u.Stats.RecordNew(userRule.Query);
                 await TrySend(u, ad, userRule.Query);
             }
         }
     }
 
-    // 2. 2dehands.be (GPUs, CPUs, RAM only, shipped, strict 85% cap; at most 1 request every 25s)
-    List<SearchRule> beRules = CollectActiveRules(s => s.EnableTweedehands, TweedehandsSource.IsEligibleRule);
+    // 2. 2dehands.be: if any search has the explicit '2dehands' flag, poll only those;
+    // otherwise fall back to eligible GPUs/CPUs/RAM with strict 85% cap (at most 1 request every 25s).
+    bool hasExplicit2dehands = CollectActiveRules(s => s.EnableTweedehands, r => r.Tweedehands).Count > 0;
+    Func<SearchRule, bool> beRuleFilter = hasExplicit2dehands
+        ? r => r.Tweedehands
+        : TweedehandsSource.IsEligibleRule;
+    List<SearchRule> beRules = CollectActiveRules(s => s.EnableTweedehands, beRuleFilter);
     if (beRules.Count > 0)
     {
         var (beQuery, beAds) = await tweedehandsSource.FetchNextDueAsync(
@@ -1690,126 +1711,140 @@ async Task CheckExtraSources()
             beQuery,
             beAds,
             s => s.EnableTweedehands,
-            (ad, r) => TweedehandsSource.IsEligibleRule(r) &&
+            (ad, r) => beRuleFilter(r) &&
                        ad.CanShip &&
                        ad.Price > 0 &&
-                       ad.Price <= TweedehandsSource.StrictMaxPrice(r.MaxPrice));
+                       ad.Price <= TweedehandsSource.StrictMaxPrice(r.MaxPrice),
+            recordHistory: false);
     }
 
-    // 3. Vinted.nl (at most 1 request every 30s, each query every ~5 min)
-    List<SearchRule> vintedRules = CollectActiveRules(s => s.EnableVinted);
+    // 3. Vinted.nl: opt-in only via 'vinted' flag in searches.txt, title-checked, no history pollution
+    List<SearchRule> vintedRules = CollectActiveRules(s => s.EnableVinted, r => r.Vinted);
     if (vintedRules.Count > 0)
     {
         var (vQuery, vAds) = await vintedSource.FetchNextDueAsync(
             marktplaatsClient, vintedRules, TimeSpan.FromSeconds(30), TimeSpan.FromMinutes(5));
-        await DispatchQueryResults(vQuery, vAds, s => s.EnableVinted);
+        await DispatchQueryResults(
+            vQuery,
+            vAds,
+            s => s.EnableVinted,
+            (ad, r) => r.Vinted && Filters.MatchesSearch(r.Query, ad),
+            recordHistory: false);
     }
 }
 
 while (true)
 {
-    await CheckAutoReload();
-    await CheckPeriodicTasks();
-
-    if (DateTime.Now < limiter.PausedUntil)
-    {
-        await PollTelegramUpdates();
-        await Task.Delay(1000);
-        continue;
-    }
-
-    await CheckCategoryFirehose();
-    await CheckTweakersFeed();
-    await CheckExtraSources();
-    await CheckNextWatchedListing();
-
-    var (activeUser, search) = PickNextDueSearch();
-    if (activeUser == null || search == "")
-    {
-        await PollTelegramUpdates();
-        await Task.Delay(1000);
-        continue;
-    }
-
-    if (!activeUser.SearchList.Rules.TryGetValue(search, out SearchRule? rule))
-    {
-        continue;
-    }
-
-    bool quiet = !activeUser.NewestIdPerSearch.ContainsKey(search);
-    bool foundNew = false;
-
     try
     {
-        string url =
-            $"https://www.marktplaats.nl/lrp/api/search?query={Uri.EscapeDataString(rule.Query)}&limit=30&sortBy=SORT_INDEX&sortOrder=DECREASING&postcode={Uri.EscapeDataString(activeUser.Postcode)}";
-        if (rule.Category != "")
+        await CheckAutoReload();
+        await CheckPeriodicTasks();
+
+        if (DateTime.Now < limiter.PausedUntil)
         {
-            url += $"&l1CategoryId={rule.Category}";
+            await PollTelegramUpdates();
+            await Task.Delay(1000);
+            continue;
         }
-        if (rule.SubCategory != 0)
+
+        await CheckCategoryFirehose();
+        await CheckTweakersFeed();
+        await CheckExtraSources();
+        await CheckNextWatchedListing();
+
+        var (activeUser, search) = PickNextDueSearch();
+        if (activeUser == null || search == "")
         {
-            url += $"&l2CategoryId={rule.SubCategory}";
+            await PollTelegramUpdates();
+            await Task.Delay(1000);
+            continue;
         }
 
-        string cacheKey = $"{rule.Query.ToLowerInvariant()}|{rule.Category}|{activeUser.Postcode}";
-        List<Listing> ads = await FetchListings(url, cacheKey);
-        activeUser.ChecksDone++;
-        activeUser.Digest.RecordCheck();
-        activeUser.Stats.RecordCheck(rule.Query);
-
-        long newest = activeUser.NewestIdPerSearch.GetValueOrDefault(search, 0);
-        long highestThisCheck = newest;
-
-        foreach (Listing ad in ads)
+        if (!activeUser.SearchList.Rules.TryGetValue(search, out SearchRule? rule))
         {
-            long idNumber = 0;
-            bool hasNumericId = ad.Id.Length > 1 && long.TryParse(ad.Id.AsSpan(1), out idNumber);
-            if (hasNumericId && idNumber > highestThisCheck)
+            continue;
+        }
+
+        bool quiet = !activeUser.NewestIdPerSearch.ContainsKey(search);
+        bool foundNew = false;
+
+        try
+        {
+            string url =
+                $"https://www.marktplaats.nl/lrp/api/search?query={Uri.EscapeDataString(rule.Query)}&limit=30&sortBy=SORT_INDEX&sortOrder=DECREASING&postcode={Uri.EscapeDataString(activeUser.Postcode)}";
+            if (rule.Category != "")
             {
-                highestThisCheck = idNumber;
+                url += $"&l1CategoryId={rule.Category}";
+            }
+            if (rule.SubCategory != 0)
+            {
+                url += $"&l2CategoryId={rule.SubCategory}";
             }
 
-            double oldPrice = activeUser.History.Remember(ad, rule.Query);
-            if (oldPrice > 0 && ad.Price > 0 && ad.Price < oldPrice)
+            string cacheKey = $"{rule.Query.ToLowerInvariant()}|{rule.Category}|{activeUser.Postcode}";
+            List<Listing> ads = await FetchListings(url, cacheKey);
+            activeUser.ChecksDone++;
+            activeUser.Digest.RecordCheck();
+            activeUser.Stats.RecordCheck(rule.Query);
+
+            long newest = activeUser.NewestIdPerSearch.GetValueOrDefault(search, 0);
+            long highestThisCheck = newest;
+
+            foreach (Listing ad in ads)
             {
-                ad.OldPrice = oldPrice;
-                bool sentDrop = await TrySend(activeUser, ad, rule.Query, "PRICE DROP");
-                if (!sentDrop)
+                long idNumber = 0;
+                bool hasNumericId = ad.Id.Length > 1 && long.TryParse(ad.Id.AsSpan(1), out idNumber);
+                if (hasNumericId && idNumber > highestThisCheck)
                 {
-                    activeUser.History.MarkPriceDropChecked(ad.Id, rule.Query);
+                    highestThisCheck = idNumber;
                 }
 
-                continue;
+                double oldPrice = activeUser.History.Remember(ad, rule.Query);
+                if (oldPrice > 0 && ad.Price > 0 && ad.Price < oldPrice)
+                {
+                    ad.OldPrice = oldPrice;
+                    bool sentDrop = await TrySend(activeUser, ad, rule.Query, "PRICE DROP");
+                    if (!sentDrop)
+                    {
+                        activeUser.History.MarkPriceDropChecked(ad.Id, rule.Query);
+                    }
+
+                    continue;
+                }
+
+                if (quiet)
+                {
+                    continue;
+                }
+
+                if (hasNumericId ? idNumber <= newest : activeUser.SeenIds.Contains(ad.Id))
+                {
+                    continue;
+                }
+
+                foundNew = true;
+                activeUser.Stats.RecordNew(rule.Query);
+
+                await TrySend(activeUser, ad, rule.Query);
             }
 
-            if (quiet)
-            {
-                continue;
-            }
+            activeUser.NewestIdPerSearch[search] = highestThisCheck;
 
-            if (hasNumericId ? idNumber <= newest : activeUser.SeenIds.Contains(ad.Id))
-            {
-                continue;
-            }
-
-            foundNew = true;
-            activeUser.Stats.RecordNew(rule.Query);
-
-            await TrySend(activeUser, ad, rule.Query);
+            activeUser.History.SaveIfNeeded();
+            activeUser.Stats.SaveIfNeeded();
+        }
+        catch (Exception ex)
+        {
+            await HandleError(rule.Query, ex);
         }
 
-        activeUser.NewestIdPerSearch[search] = highestThisCheck;
-
-        activeUser.History.SaveIfNeeded();
-        activeUser.Stats.SaveIfNeeded();
+        activeUser.Scheduler.Done(search, foundNew, rule.Urgent, Filters.IsNight(activeUser.Settings), quiet);
+        await PollTelegramUpdates();
+        await DelayWithCommands(limiter.NextDelayWithJitterMs());
     }
     catch (Exception ex)
     {
-        await HandleError(rule.Query, ex);
+        BotLog.Write($"Loop error (bot keeps running): {ex}");
+        await Task.Delay(5000);
     }
-
-    activeUser.Scheduler.Done(search, foundNew, rule.Urgent, Filters.IsNight(activeUser.Settings), quiet);
-    await PollTelegramUpdates();
-    await DelayWithCommands(limiter.NextDelayWithJitterMs());
 }

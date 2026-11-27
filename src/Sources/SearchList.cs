@@ -12,6 +12,8 @@ public class SearchRule
     public string[] SkipWords { get; set; } = Array.Empty<string>();
     public bool Urgent { get; set; }
     public bool Defect { get; set; }
+    public bool Vinted { get; set; }
+    public bool Tweedehands { get; set; }
 }
 
 public class SearchList
@@ -395,9 +397,9 @@ public class SearchList
             : Array.Empty<string>();
         foreach (string f in flags)
         {
-            if (f != "urgent" && f != "defect")
+            if (f != "urgent" && f != "defect" && f != "vinted" && f != "2dehands")
             {
-                error = $"{prefix}\"{f}\" is not valid. Use urgent, defect or urgent,defect, or leave it out.";
+                error = $"{prefix}\"{f}\" is not valid. Use urgent, defect, vinted, 2dehands (comma-separated), or leave it out.";
                 return false;
             }
         }
@@ -410,7 +412,9 @@ public class SearchList
             SubCategory = subCategory,
             SkipWords = skipWords,
             Urgent = flags.Contains("urgent"),
-            Defect = flags.Contains("defect")
+            Defect = flags.Contains("defect"),
+            Vinted = flags.Contains("vinted"),
+            Tweedehands = flags.Contains("2dehands")
         };
         return true;
     }
@@ -427,6 +431,8 @@ public class SearchList
         List<string> flagList = new List<string>();
         if (rule.Urgent) flagList.Add("urgent");
         if (rule.Defect) flagList.Add("defect");
+        if (rule.Vinted) flagList.Add("vinted");
+        if (rule.Tweedehands) flagList.Add("2dehands");
         if (flagList.Count > 0)
         {
             return $"{rule.Query};{rule.MaxPrice};{categoryPart};{skipPart};{string.Join(",", flagList)}";

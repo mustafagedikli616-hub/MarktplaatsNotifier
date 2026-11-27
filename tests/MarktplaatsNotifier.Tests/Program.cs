@@ -38,10 +38,10 @@ try
         sl.Add("test item;99;356/2954;barst,water;urgent").StartsWith("✅") &&
         sl.Rules.TryGetValue("test item", out var r) &&
         r.SubCategory == 2954 && r.Urgent && !r.Defect && r.SkipWords.Length == 2);
-    Check("Add urgent,defect line round-trips both flags on disk",
-        sl.Add("defect gpu;120;322;water;urgent,defect").StartsWith("✅") &&
-        sl.Rules.TryGetValue("defect gpu", out var dr) && dr.Urgent && dr.Defect &&
-        File.ReadAllText(Path.Combine(simDir, "searches.txt")).Contains("defect gpu;120;322;water;urgent,defect"));
+    Check("Add urgent,defect,vinted,2dehands line round-trips all flags on disk",
+        sl.Add("defect gpu;120;322;water;urgent,defect,vinted,2dehands").StartsWith("✅") &&
+        sl.Rules.TryGetValue("defect gpu", out var dr) && dr.Urgent && dr.Defect && dr.Vinted && dr.Tweedehands &&
+        File.ReadAllText(Path.Combine(simDir, "searches.txt")).Contains("defect gpu;120;322;water;urgent,defect,vinted,2dehands"));
     Check("Rejects unknown 5th-column flag", sl.Add("badflag;50;322;;banana").StartsWith("❌"));
     Check("Rejects /2954 without main category", sl.Add("bad;50;/2954").StartsWith("❌"));
     Check("Rejects negative price", sl.Add("neg;-10;322").StartsWith("❌"));
@@ -182,16 +182,79 @@ try
         pUrl!.Query == "rtx 3070" && pUrl.MaxPrice == 140 &&
         MarktplaatsUrlParser.TryExtractListingUrl("Monitor https://link.marktplaats.nl/m2189123456", out _, out var lId) && lId == "m2189123456");
 
-    HttpClient mockClient = new HttpClient(new MockHandler(_ => Task.FromResult(
-        new HttpResponseMessage(HttpStatusCode.OK)
+    int tgMessagesSent = 0;
+    HttpClient mockClient = new HttpClient(new MockHandler(req =>
+    {
+        if (req.RequestUri?.AbsolutePath.Contains("sendMessage") == true)
+        {
+            tgMessagesSent++;
+        }
+        return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent("""{"ok":true,"result":{"message_id":77}}""", Encoding.UTF8, "application/json")
-        })));
+        });
+    }));
 
     UserSession owner = new UserSession("100", true, "Owner", simDir, "FAKE", "3511AB", 15, true, mockClient, mockClient);
     Check("Owner session loads cleanly", owner.LoadData() == "");
 
-    UserManager um = new UserManager(owner, "FAKE", mockClient, mockClient, _ => { });
+    UserManager um = new UserManager(owner, "FAKE", mockClient, mockClient, (session, manager) =>
+    {
+        session.Commands = new CommandHandler(
+            session,
+            manager,
+            new Dictionary<int, string>(),
+            _ => "status ok",
+            (_, _) => Task.FromResult<Listing?>(null),
+            (_, r) => Task.FromResult($"Checked {r.Query}"),
+            (_, q) => Task.FromResult(PriceLookup.Compute(q, Array.Empty<double>(), Array.Empty<double>())),
+            () => { });
+    });
+
+    // Test 10: /menu as owner (guards against userManager null regression)
+    int beforeMenu = tgMessagesSent;
+    await owner.Commands!.HandleMessage("/menu", null);
+    Check("Opening /menu as owner succeeds without null userManager", tgMessagesSent > beforeMenu);
+
+    // Test 11a: Telegram 429 retry_after waits and retries cleanly
+    int attempts429 = 0;
+    HttpClient retryClient = new HttpClient(new MockHandler(_ =>
+    {
+        attempts429++;
+        if (attempts429 == 1)
+        {
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.TooManyRequests)
+            {
+                Content = new StringContent("""{"ok":false,"error_code":429,"parameters":{"retry_after":1}}""", Encoding.UTF8, "application/json")
+            });
+        }
+        return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("""{"ok":true,"result":{"message_id":88}}""", Encoding.UTF8, "application/json")
+        });
+    }));
+    Telegram retryTg = new Telegram(retryClient, "FAKE", "100");
+    await retryTg.SendText("429 test");
+    Check("Telegram 429 respects retry_after and retries cleanly", attempts429 == 2);
+
+    // Test 11b: Telegram timeout (TaskCanceledException) doesn't crash when handled
+    HttpClient timeoutClient = new HttpClient(new MockHandler(_ =>
+        Task.FromException<HttpResponseMessage>(new TaskCanceledException("Simulated 25s timeout"))));
+    Telegram timeoutTg = new Telegram(timeoutClient, "FAKE", "100");
+    bool timedOutCaught = false;
+    try
+    {
+        await timeoutTg.SendListing(
+            new Listing { Id = "vinted-999", Source = "Vinted", Title = "Test", Price = 50, PriceText = "€50", Photo = "https://example.com/a.jpg", Link = "https://www.vinted.nl/items/999" },
+            night: false,
+            alert: "");
+    }
+    catch (TaskCanceledException)
+    {
+        timedOutCaught = true;
+    }
+    Check("Telegram SendListing timeout surfaces cleanly for TrySend catch without crashing", timedOutCaught);
+
     string inv = um.CreateInviteCode();
     Check("Multi-user invite + join works", um.TryRedeemInvite(inv, "200", "Alice", out var alice, out _) && alice != null);
 

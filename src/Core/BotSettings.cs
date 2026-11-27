@@ -15,7 +15,7 @@ public class BotSettings
     public bool EnableTweakers { get; set; } = true;
     public bool EnableTweedehands { get; set; } = true;
     public bool EnableCoolblue { get; set; } = true;
-    public bool EnableVinted { get; set; } = true;
+    public bool EnableVinted { get; set; } = false;
     public bool MorningDigestEnabled { get; set; } = true;
     public int MorningDigestHour { get; set; } = 7;
 

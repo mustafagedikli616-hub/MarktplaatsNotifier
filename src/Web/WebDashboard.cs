@@ -217,6 +217,8 @@ public class WebDashboard : IDisposable
                 int subCategory = GetInt(root, "subCategory", 0);
                 bool urgent = GetBool(root, "urgent", false);
                 bool defect = GetBool(root, "defect", false);
+                bool vinted = GetBool(root, "vinted", false);
+                bool tweedehands = GetBool(root, "tweedehands", false);
                 string[] skipWords = GetStringArray(root, "skipWords");
 
                 if (MarktplaatsUrlParser.IsMarktplaatsSearchUrl(rawQuery) &&
@@ -249,7 +251,9 @@ public class WebDashboard : IDisposable
                     SubCategory = Math.Max(0, subCategory),
                     SkipWords = skipWords,
                     Urgent = urgent,
-                    Defect = defect
+                    Defect = defect,
+                    Vinted = vinted,
+                    Tweedehands = tweedehands
                 };
 
                 string msg = owner.SearchList.AddRule(rule);
@@ -286,6 +290,8 @@ public class WebDashboard : IDisposable
                         existing.SubCategory = Math.Max(0, GetInt(root, "subCategory", existing.SubCategory));
                         existing.Urgent = GetBool(root, "urgent", existing.Urgent);
                         existing.Defect = GetBool(root, "defect", existing.Defect);
+                        existing.Vinted = GetBool(root, "vinted", existing.Vinted);
+                        existing.Tweedehands = GetBool(root, "tweedehands", existing.Tweedehands);
                         if (root.TryGetProperty("skipWords", out _))
                         {
                             existing.SkipWords = GetStringArray(root, "skipWords");
@@ -603,6 +609,8 @@ public class WebDashboard : IDisposable
                 r.SkipWords,
                 r.Urgent,
                 r.Defect,
+                r.Vinted,
+                r.Tweedehands,
                 sent = st?.Sent ?? 0,
                 skipped = st?.FilteredOut ?? 0
             };

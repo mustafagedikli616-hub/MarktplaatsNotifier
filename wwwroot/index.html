@@ -1017,7 +1017,7 @@
             <input type="checkbox" class="toggle" id="setCoolblue">
           </div>
           <div class="form-row">
-            <div><div class="form-label">Vinted.nl</div><div class="form-help">Watch Vinted for cheap consoles, controllers, and electronics</div></div>
+            <div><div class="form-label">Vinted.nl</div><div class="form-help">Opt-in only for searches tagged with the 'vinted' flag</div></div>
             <input type="checkbox" class="toggle" id="setVinted">
           </div>
         </div>
@@ -1716,7 +1716,7 @@ function renderSettings() {
   document.getElementById("setTweakers").checked = s.enableTweakers !== false;
   document.getElementById("setTweedehands").checked = s.enableTweedehands !== false;
   document.getElementById("setCoolblue").checked = s.enableCoolblue !== false;
-  document.getElementById("setVinted").checked = s.enableVinted !== false;
+  document.getElementById("setVinted").checked = !!s.enableVinted;
 
   document.getElementById("setAiEnabled").checked = !!s.aiEnabled;
   document.getElementById("setAiProvider").value = s.aiProvider || "gemini";
