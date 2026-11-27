@@ -579,7 +579,7 @@ async Task PollTelegramUpdates()
     }
     catch (Exception ex)
     {
-        BotLog.Write($"Error while checking commands: {ex.Message}");
+        BotLog.Write($"Error while checking commands: {ex}");
     }
 }
 
